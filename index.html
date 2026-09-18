@@ -126,6 +126,17 @@ label.field-label { font-size: 13px; font-weight: 600; color: var(--text-seconda
 .sync-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
 .sync-dot.online { background: #2E7D32; }
 .sync-dot.offline { background: #C1440E; }
+.heatmap-wrap { overflow-x: auto; scrollbar-width: none; margin-top: 10px; }
+.heatmap-wrap::-webkit-scrollbar { display: none; }
+.heatmap-grid { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 1fr); gap: 3px; width: max-content; padding: 2px 2px 2px 0; }
+.heat-cell { width: 11px; height: 11px; border-radius: 3px; background: var(--surface-variant); }
+.heat-cell.done { background: var(--primary); }
+.heat-cell.missed { background: var(--surface-variant); opacity: .55; }
+.heat-cell.blank { background: transparent; }
+.celebration { position: fixed; top: 16px; left: 16px; right: 16px; max-width: 440px; margin: 0 auto; background: var(--primary); color: var(--bg); padding: 16px 20px; border-radius: 16px; font-size: 15px; font-weight: 700; text-align: center; z-index: 300; box-shadow: 0 6px 20px rgba(0,0,0,.3); opacity: 0; transform: translateY(-16px) scale(.95); transition: opacity .3s, transform .3s; }
+.celebration.show { opacity: 1; transform: translateY(0) scale(1); }
+.locked-note { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.check-btn[disabled] { opacity: .35; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -170,7 +181,7 @@ try { enableIndexedDbPersistence(db); } catch (e) { console.warn("Offline persis
 // ---------- Data model ----------
 var defaultData = {
   habits: [], completions: [], journal: [],
-  settings: { theme: "system", homeView: "list", onboardingDone: false },
+  settings: { theme: "system", homeView: "list", onboardingDone: false, nickname: "" },
   nextHabitId: 1, nextJournalId: 1
 };
 
@@ -179,6 +190,7 @@ var currentUser = null;
 var unsubscribeDoc = null;
 var saveTimer = null;
 var suppressNextSnapshotRender = false;
+var nicknamePromptDismissed = false;
 
 function applyTheme() {
   var root = document.documentElement;
@@ -217,6 +229,9 @@ function subscribeToUser(uid) {
     }
     applyTheme();
     render();
+    if (!DATA.settings.nickname && !nicknamePromptDismissed && !document.getElementById("modal-root")) {
+      openNicknamePrompt();
+    }
   }, function(err) {
     console.error("Sync error", err);
     showSnackbar("Sync error - showing your last-known data.");
@@ -255,6 +270,79 @@ function formatMedium(iso) { return fromISO(iso).toLocaleDateString(undefined,{d
 function formatRelative(iso) { if (iso===todayISO()) return "Today"; if (iso===addDays(todayISO(),-1)) return "Yesterday"; return formatMedium(iso); }
 function greeting() { var h=new Date().getHours(); if (h<12) return "Good morning"; if (h<17) return "Good afternoon"; if (h<21) return "Good evening"; return "Good night"; }
 function monthYear(iso) { return fromISO(iso).toLocaleDateString(undefined,{month:'long',year:'numeric'}); }
+function getDisplayName() {
+  if (DATA.settings.nickname) return DATA.settings.nickname;
+  if (currentUser && currentUser.displayName) return currentUser.displayName.split(" ")[0];
+  return "there";
+}
+function openNicknamePrompt() {
+  var wrap = el("div", {});
+  wrap.appendChild(el("div", { class:"h-title", text:"What should we call you?" }));
+  wrap.appendChild(el("div", { class:"h-body", style:"margin:8px 0 14px 0;", text:"Pick a nickname \u2014 we'll use it to greet you and celebrate your streaks." }));
+  var nickInput = el("input", { placeholder:"Nickname", value: DATA.settings.nickname || (currentUser && currentUser.displayName ? currentUser.displayName.split(" ")[0] : "") });
+  wrap.appendChild(nickInput);
+  var row = el("div", { class:"row", style:"margin-top:8px;" });
+  var skipBtn = el("button", { class:"btn btn-outline", style:"flex:1;", text:"Skip" });
+  skipBtn.addEventListener("click", function(){ nicknamePromptDismissed = true; closeModal(); });
+  var saveBtn = el("button", { class:"btn btn-primary", style:"flex:1;", text:"Save" });
+  saveBtn.addEventListener("click", function() {
+    var v = nickInput.value.trim();
+    DATA.settings.nickname = v || getDisplayName();
+    save(); closeModal(); render();
+  });
+  row.appendChild(skipBtn); row.appendChild(saveBtn);
+  wrap.appendChild(row);
+  openModal(wrap, true);
+}
+function showCelebration(msg) {
+  var existing = document.getElementById("celebration-banner");
+  if (existing) existing.remove();
+  var banner = el("div", { id:"celebration-banner", class:"celebration", text: msg });
+  document.getElementById("app").appendChild(banner);
+  setTimeout(function(){ banner.classList.add("show"); }, 10);
+  setTimeout(function(){
+    banner.classList.remove("show");
+    setTimeout(function(){ if (banner.parentNode) banner.remove(); }, 300);
+  }, 3200);
+}
+function triggerStreakCelebrationIfMilestone(habit, streak) {
+  if (streak > 0 && streak % 5 === 0) {
+    showCelebration("\uD83C\uDF89 Yaay " + getDisplayName() + "! You've completed " + streak + " days of \"" + habit.name + "\"!");
+  }
+}
+function canMarkOn(habit, iso) { return iso >= habit.startDate && iso <= todayISO(); }
+function handleToggleToday(habit) {
+  var today = todayISO();
+  if (!canMarkOn(habit, today)) { showSnackbar("This habit starts " + formatMedium(habit.startDate)); return; }
+  var wasComplete = isComplete(habit.id, today);
+  toggleCompletion(habit, today);
+  if (!wasComplete) {
+    var stats = computeStats(habit, today);
+    triggerStreakCelebrationIfMilestone(habit, stats.currentStreak);
+  }
+  render();
+}
+function buildHeatmapGrid(habit) {
+  var weeks = 10;
+  var today = todayISO();
+  var totalDays = weeks * 7;
+  var startIso = addDays(today, -(totalDays - 1));
+  var stats = computeStats(habit, today);
+  var grid = el("div", { class:"heatmap-grid" });
+  var leadDow = isoDayOfWeek(startIso);
+  for (var i=1;i<leadDow;i++) grid.appendChild(el("div",{class:"heat-cell blank"}));
+  var d = startIso;
+  while (d <= today) {
+    var cls = "heat-cell";
+    if (d < habit.startDate) cls += " blank";
+    else if (stats.completedDays[d]) cls += " done";
+    else if (isScheduledOn(habit, d)) cls += " missed";
+    else cls += " blank";
+    grid.appendChild(el("div", { class:cls, title:d }));
+    d = addDays(d,1);
+  }
+  return el("div", { class:"heatmap-wrap" }, [grid]);
+}
 
 // ---------- Domain logic ----------
 var ICONS = ["\u2B50","\uD83D\uDCA7","\uD83D\uDCDA","\uD83C\uDFC3","\uD83E\uDDD8","\uD83C\uDF19","\uD83E\uDD57","\uD83D\uDCAA","\uD83D\uDEB4","\uD83C\uDFAF","\u270D\uFE0F","\uD83C\uDFB8","\uD83E\uDDF9","\uD83D\uDC8A","\uD83D\uDEAD","\uD83C\uDF31","\u2600\uFE0F","\u2764\uFE0F","\uD83E\uDDE0","\uD83D\uDCB0","\uD83C\uDFA8","\uD83D\uDDE3\uFE0F","\uD83D\uDEB6","\uD83C\uDF4E","\u2615","\uD83D\uDCF5","\uD83D\uDECF\uFE0F","\uD83E\uDDF4","\uD83D\uDC3E","\uD83D\uDCDD"];
@@ -384,6 +472,8 @@ function render() {
   if (currentTab==="journal" && activeHabits().length>0) root.appendChild(el("button",{class:"fab",text:"+",onclick:function(){openJournalPicker();}}));
 
   root.appendChild(renderBottomNav());
+  var grids = root.querySelectorAll(".heatmap-wrap");
+  for (var gi=0; gi<grids.length; gi++) grids[gi].scrollLeft = grids[gi].scrollWidth;
 }
 
 function renderLoginScreen() {
@@ -421,7 +511,7 @@ function renderHome(content) {
   var pct = scheduledToday.length ? Math.round(doneToday/scheduledToday.length*100) : 0;
 
   var top = el("div", { class:"topbar" }, [
-    el("div", { class:"h-headline", text: greeting()+" \uD83D\uDC4B" }),
+    el("div", { class:"h-headline", text: greeting()+", "+getDisplayName()+" \uD83D\uDC4B" }),
     el("div", { class:"h-body", text: formatHeaderDate(today) })
   ]);
   content.appendChild(top);
@@ -454,33 +544,40 @@ function renderHome(content) {
 
 function habitListCard(habit, stats, done) {
   var card = el("div", { class:"card" });
+  var notStarted = todayISO() < habit.startDate;
   var row = el("div", { class:"habit-row" });
   row.appendChild(el("div", { class:"habit-icon", style:"background:"+habit.color+"26;", text: habit.icon }));
   var mid = el("div", { style:"flex:1;min-width:0;cursor:pointer;" });
   mid.addEventListener("click", function(){ openHabitDetail(habit.id); });
   mid.appendChild(el("div", { class:"h-title", style:"font-size:15px;", text: habit.name }));
-  mid.appendChild(el("div", { class:"h-body", style:"font-size:12px;", text: "\uD83D\uDD25 "+stats.currentStreak+" day streak" }));
+  if (notStarted) mid.appendChild(el("div", { class:"locked-note", text: "\uD83D\uDD12 Starts "+formatMedium(habit.startDate) }));
+  else mid.appendChild(el("div", { class:"h-body", style:"font-size:12px;", text: "\uD83D\uDD25 "+stats.currentStreak+" day streak" }));
   var pbWrap = el("div", { style:"margin-top:6px;" });
   pbWrap.appendChild(el("div", { class:"progress-bar", style:"height:5px;" }, [el("div",{class:"progress-fill",style:"width:"+Math.round(stats.completionRate*100)+"%"})]));
   mid.appendChild(pbWrap);
   row.appendChild(mid);
   var checkBtn = el("button", { class:"check-btn"+(done?" done":""), text: done?"\u2713":"" });
-  checkBtn.addEventListener("click", function(){ toggleCompletion(habit, todayISO()); render(); });
+  if (notStarted) checkBtn.setAttribute("disabled", "disabled");
+  checkBtn.addEventListener("click", function(){ handleToggleToday(habit); });
   row.appendChild(checkBtn);
   card.appendChild(row);
+  card.appendChild(buildHeatmapGrid(habit));
   return card;
 }
 function habitStreakCard(habit, stats, done) {
   var card = el("div", { class:"card" });
+  var notStarted = todayISO() < habit.startDate;
   var top = el("div", { class:"habit-row", style:"padding-top:0;" });
   top.appendChild(el("div", { text: habit.icon, style:"font-size:22px;" }));
   var mid = el("div", { style:"flex:1;cursor:pointer;" });
   mid.addEventListener("click", function(){ openHabitDetail(habit.id); });
   mid.appendChild(el("div", { class:"h-title", style:"font-size:15px;", text: habit.name }));
-  mid.appendChild(el("div", { class:"h-body", style:"font-size:12px;", text: "Best "+stats.bestStreak+" \u00b7 "+Math.round(stats.completionRate*100)+"% overall" }));
+  if (notStarted) mid.appendChild(el("div", { class:"locked-note", text: "\uD83D\uDD12 Starts "+formatMedium(habit.startDate) }));
+  else mid.appendChild(el("div", { class:"h-body", style:"font-size:12px;", text: "Best "+stats.bestStreak+" \u00b7 "+Math.round(stats.completionRate*100)+"% overall" }));
   top.appendChild(mid);
   var checkBtn = el("button", { class:"check-btn"+(done?" done":""), text: done?"\u2713":"" });
-  checkBtn.addEventListener("click", function(){ toggleCompletion(habit, todayISO()); render(); });
+  if (notStarted) checkBtn.setAttribute("disabled", "disabled");
+  checkBtn.addEventListener("click", function(){ handleToggleToday(habit); });
   top.appendChild(checkBtn);
   card.appendChild(top);
   var metrics = el("div", { class:"row", style:"margin-top:10px;text-align:center;" });
@@ -488,6 +585,7 @@ function habitStreakCard(habit, stats, done) {
     metrics.appendChild(el("div",{style:"flex:1;"},[el("div",{style:"font-weight:700;",text:m[0]+" "+m[1]}),el("div",{class:"h-body",style:"font-size:11px;",text:m[2]})]));
   });
   card.appendChild(metrics);
+  card.appendChild(buildHeatmapGrid(habit));
   return card;
 }
 function emptyState(emoji, title, subtitle, actionLabel, onAction) {
@@ -591,11 +689,22 @@ function openHabitDetail(habitId) {
     statsRow.appendChild(el("div",{class:"stat-box"},[el("div",{class:"val",text:"\uD83C\uDFC6 "+stats.bestStreak}),el("div",{class:"lbl",text:"Best streak"})]));
     statsRow.appendChild(el("div",{class:"stat-box"},[el("div",{class:"val",text:Math.round(stats.completionRate*100)+"%"}),el("div",{class:"lbl",text:"Completion"})]));
     wrap.appendChild(statsRow);
+    wrap.appendChild(buildHeatmapGrid(habit));
     var today = todayISO();
     var doneToday = isComplete(habit.id, today);
-    var completeBtn = el("button", { class:"btn btn-primary btn-full", style:"margin-top:14px;"+(doneToday?"background:"+habit.color+";":""), text: doneToday?"\u2713 Completed today":"Mark Complete" });
-    completeBtn.addEventListener("click", function(){ toggleCompletion(habit, today); closeModal(); openHabitDetail(habitId); });
-    wrap.appendChild(completeBtn);
+    var notStarted = today < habit.startDate;
+    if (notStarted) {
+      wrap.appendChild(el("div", { class:"h-body", style:"margin-top:14px;text-align:center;", text: "\uD83D\uDD12 This habit starts "+formatMedium(habit.startDate)+" \u2014 you can mark it complete from then." }));
+    } else {
+      var completeBtn = el("button", { class:"btn btn-primary btn-full", style:"margin-top:14px;"+(doneToday?"background:"+habit.color+";":""), text: doneToday?"\u2713 Completed today":"Mark Complete" });
+      completeBtn.addEventListener("click", function(){
+        var wasComplete = isComplete(habit.id, today);
+        toggleCompletion(habit, today);
+        if (!wasComplete) { var stats2 = computeStats(habit, today); triggerStreakCelebrationIfMilestone(habit, stats2.currentStreak); }
+        closeModal(); openHabitDetail(habitId);
+      });
+      wrap.appendChild(completeBtn);
+    }
     var backfillBtn = el("button", { class:"btn-text", style:"margin-top:10px;display:block;", text:"Log past days" });
     backfillBtn.addEventListener("click", function(){ openBackfillDialog(habit); });
     wrap.appendChild(backfillBtn);
@@ -650,11 +759,12 @@ function buildMonthCalendar(monthIso, habit, onDayClick) {
   for (var i=0;i<leadingBlanks;i++) grid.appendChild(el("div",{class:"cal-cell blank"}));
   for (var day=1;day<=daysInMonth;day++) {
     var dateIso = monthIso+"-"+String(day).padStart(2,'0');
+    var locked = habit && dateIso < habit.startDate;
     var cellClass = "cal-cell";
-    if (dateIso>today) cellClass += " future";
+    if (dateIso>today || locked) cellClass += " future";
     else if (habit && stats.completedDays[dateIso]) cellClass += " done";
     var cell = el("div", { class:cellClass, text:String(day) });
-    if (dateIso<=today) cell.addEventListener("click", function(d){return function(){onDayClick(d);};}(dateIso));
+    if (dateIso<=today && !locked) cell.addEventListener("click", function(d){return function(){onDayClick(d);};}(dateIso));
     grid.appendChild(cell);
   }
   return grid;
@@ -667,7 +777,7 @@ function openBackfillDialog(habit) {
   wrap.appendChild(el("label", { class:"field-label", text:"Number of days, including today" }));
   var daysInput = el("input", { type:"number", value:"7", min:"1", max:"365" });
   wrap.appendChild(daysInput);
-  wrap.appendChild(el("div", { class:"h-body", style:"font-size:12px;", text:"If the habit's start date is more recent than that, it'll be moved back automatically so the streak counts correctly." }));
+  wrap.appendChild(el("div", { class:"h-body", style:"font-size:12px;", text:"Only days on or after the habit's start date ("+formatMedium(habit.startDate)+") can be marked complete." }));
   var row = el("div", { class:"row", style:"margin-top:16px;" });
   var cancelBtn = el("button", { class:"btn btn-outline", style:"flex:1;", text:"Cancel" });
   cancelBtn.addEventListener("click", closeModal);
@@ -675,11 +785,13 @@ function openBackfillDialog(habit) {
   okBtn.addEventListener("click", function() {
     var n = parseInt(daysInput.value) || 0;
     if (n<=0) return;
-    var start = addDays(todayISO(), -(n-1));
-    if (start < habit.startDate) habit.startDate = start;
+    var requestedStart = addDays(todayISO(), -(n-1));
+    var start = requestedStart < habit.startDate ? habit.startDate : requestedStart;
     var d = start;
-    while (d <= todayISO()) { if (isScheduledOn(habit,d)) setCompletion(habit, d, true); d = addDays(d,1); }
-    save(); closeModal(); openHabitDetail(habit.id); showSnackbar("Logged "+n+" days");
+    var logged = 0;
+    while (d <= todayISO()) { if (isScheduledOn(habit,d)) { setCompletion(habit, d, true); logged++; } d = addDays(d,1); }
+    save(); closeModal(); openHabitDetail(habit.id);
+    showSnackbar(requestedStart < habit.startDate ? "Logged "+logged+" days (habit starts "+formatMedium(habit.startDate)+")" : "Logged "+logged+" days");
   });
   row.appendChild(cancelBtn); row.appendChild(okBtn);
   wrap.appendChild(row);
@@ -875,6 +987,12 @@ function renderSettings(content) {
   acctCard.appendChild(signOutBtn);
   content.appendChild(acctCard);
   content.appendChild(el("div", { class:"h-body", style:"font-size:12px;margin:-4px 0 4px 0;display:flex;align-items:center;", html:'<span class="sync-dot online"></span> Synced to your Google account \u2014 open this page signed in on any device to see the same data.' }));
+
+  var nickCard = el("div", { class:"card", style:"display:flex;align-items:center;justify-content:space-between;" }, [
+    el("div", {}, [ el("div",{class:"field-label",style:"margin-bottom:2px;",text:"Nickname"}), el("div",{style:"font-weight:600;",text: getDisplayName()}) ]),
+    (function(){ var b=el("button",{class:"btn-text",text:"Change"}); b.addEventListener("click", openNicknamePrompt); return b; })()
+  ]);
+  content.appendChild(nickCard);
 
   content.appendChild(el("div", { class:"section-title", text:"Appearance" }));
   var themeCard = el("div", { class:"card" });

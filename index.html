@@ -120,7 +120,7 @@ label.field-label { font-size: 13px; font-weight: 600; color: var(--text-seconda
 .bar-fill { width: 18px; background: var(--primary); border-radius: 4px 4px 0 0; min-height: 3px; }
 .bar-label { font-size: 10px; color: var(--text-secondary); margin-top: 4px; }
 .bar-value { font-size: 10px; color: var(--text-secondary); margin-bottom: 4px; }
-.login-screen { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; text-align: center; }
+.login-screen { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; text-align: center; background: linear-gradient(180deg, var(--primary-container) 0%, var(--bg) 55%); }
 .google-btn { display: flex; align-items: center; gap: 10px; background: var(--surface); color: var(--text); border: 1.5px solid var(--outline); border-radius: 50px; padding: 12px 24px; font-size: 15px; font-weight: 600; cursor: pointer; box-shadow: var(--shadow); }
 .avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
 .sync-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
@@ -128,15 +128,21 @@ label.field-label { font-size: 13px; font-weight: 600; color: var(--text-seconda
 .sync-dot.offline { background: #C1440E; }
 .heatmap-wrap { overflow-x: auto; scrollbar-width: none; margin-top: 10px; }
 .heatmap-wrap::-webkit-scrollbar { display: none; }
-.heatmap-grid { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 1fr); gap: 3px; width: max-content; padding: 2px 2px 2px 0; }
-.heat-cell { width: 11px; height: 11px; border-radius: 3px; background: var(--surface-variant); }
-.heat-cell.done { background: var(--primary); }
-.heat-cell.missed { background: var(--surface-variant); opacity: .55; }
-.heat-cell.blank { background: transparent; }
-.celebration { position: fixed; top: 16px; left: 16px; right: 16px; max-width: 440px; margin: 0 auto; background: var(--primary); color: var(--bg); padding: 16px 20px; border-radius: 16px; font-size: 15px; font-weight: 700; text-align: center; z-index: 300; box-shadow: 0 6px 20px rgba(0,0,0,.3); opacity: 0; transform: translateY(-16px) scale(.95); transition: opacity .3s, transform .3s; }
+.heatmap-grid { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 1fr); gap: 4px; width: max-content; padding: 2px 2px 6px 0; }
+.heat-cell { width: 13px; height: 13px; border-radius: 4px; border: 1.5px solid var(--outline); background: transparent; cursor: pointer; transition: background .15s, border-color .15s, transform .1s; }
+.heat-cell:active { transform: scale(.85); }
+.heat-cell.done { background: var(--primary); border-color: var(--primary); }
+.heat-cell.invisible { border: none; background: transparent; visibility: hidden; cursor: default; }
+.celebration { position: fixed; top: 16px; left: 16px; right: 16px; max-width: 440px; margin: 0 auto; background: var(--primary); color: var(--bg); padding: 18px 22px; border-radius: 18px; font-size: 15px; font-weight: 700; text-align: center; z-index: 300; box-shadow: 0 8px 24px rgba(0,0,0,.35); opacity: 0; transform: translateY(-16px) scale(.9); transition: opacity .3s, transform .3s; cursor: pointer; }
 .celebration.show { opacity: 1; transform: translateY(0) scale(1); }
 .locked-note { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
 .check-btn[disabled] { opacity: .35; cursor: not-allowed; }
+.splash-screen { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
+.splash-spinner { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--surface-variant); border-top-color: var(--primary); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.hero-illustration { font-size: 56px; line-height: 1; margin-bottom: 4px; }
+.feature-row { display: flex; align-items: center; gap: 12px; text-align: left; padding: 10px 0; }
+.feature-row .emoji { font-size: 22px; width: 32px; text-align: center; flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -147,7 +153,8 @@ label.field-label { font-size: 13px; font-weight: 600; color: var(--text-seconda
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
 import {
-  getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
+  getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult,
+  setPersistence, browserLocalPersistence, signOut, onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, onSnapshot,
@@ -174,6 +181,10 @@ var db = getFirestore(firebaseApp);
 var googleProvider = new GoogleAuthProvider();
 
 try { enableIndexedDbPersistence(db); } catch (e) { console.warn("Offline persistence unavailable:", e); }
+// Explicitly persist the sign-in across browser restarts/tab closes, rather than
+// relying on the default, so re-opening the app never asks to sign in again.
+setPersistence(auth, browserLocalPersistence).catch(function(e) { console.warn("Auth persistence setup failed:", e); });
+getRedirectResult(auth).catch(function(e) { console.warn("Redirect sign-in error:", e); });
 
 (function() {
 "use strict";
@@ -181,7 +192,7 @@ try { enableIndexedDbPersistence(db); } catch (e) { console.warn("Offline persis
 // ---------- Data model ----------
 var defaultData = {
   habits: [], completions: [], journal: [],
-  settings: { theme: "system", homeView: "list", onboardingDone: false, nickname: "" },
+  settings: { theme: "system", homeView: "list", onboardingDone: false, nickname: "", bgColor: "" },
   nextHabitId: 1, nextJournalId: 1
 };
 
@@ -191,12 +202,16 @@ var unsubscribeDoc = null;
 var saveTimer = null;
 var suppressNextSnapshotRender = false;
 var nicknamePromptDismissed = false;
+var authChecked = false;
+var BG_PRESETS = ["#F9FBF8","#FDF3E7","#FBEAEA","#EAF4FB","#F0F7EA","#F3EAFB","#FFF6E0","#12140F"];
 
 function applyTheme() {
   var root = document.documentElement;
   if (DATA.settings.theme === "light") root.setAttribute("data-theme", "light");
   else if (DATA.settings.theme === "dark") root.setAttribute("data-theme", "dark");
   else root.removeAttribute("data-theme");
+  if (DATA.settings.bgColor) root.style.setProperty("--bg", DATA.settings.bgColor);
+  else root.style.removeProperty("--bg");
 }
 
 // Debounced write to Firestore - the doc listener below applies the change
@@ -230,7 +245,7 @@ function subscribeToUser(uid) {
     applyTheme();
     render();
     if (!DATA.settings.nickname && !nicknamePromptDismissed && !document.getElementById("modal-root")) {
-      openNicknamePrompt();
+      openNicknamePrompt(true);
     }
   }, function(err) {
     console.error("Sync error", err);
@@ -240,11 +255,13 @@ function subscribeToUser(uid) {
 
 onAuthStateChanged(auth, function(user) {
   currentUser = user;
+  authChecked = true;
   if (user) {
     subscribeToUser(user.uid);
   } else {
     if (unsubscribeDoc) { unsubscribeDoc(); unsubscribeDoc = null; }
     DATA = JSON.parse(JSON.stringify(defaultData));
+    applyTheme();
     render();
   }
 });
@@ -252,7 +269,17 @@ onAuthStateChanged(auth, function(user) {
 function signIn() {
   signInWithPopup(auth, googleProvider).catch(function(e) {
     console.error(e);
-    showSnackbar("Sign-in failed: " + (e.code || e.message));
+    // Popups are unreliable on some mobile browsers/webviews - fall back to a
+    // full-page redirect flow instead of just showing an error.
+    var popupIssue = ["auth/popup-blocked","auth/operation-not-supported-in-this-environment","auth/cancelled-popup-request"];
+    if (popupIssue.indexOf(e.code) !== -1) {
+      signInWithRedirect(auth, googleProvider).catch(function(e2) {
+        console.error(e2);
+        showSnackbar("Sign-in failed: " + (e2.code || e2.message));
+      });
+    } else if (e.code !== "auth/popup-closed-by-user") {
+      showSnackbar("Sign-in failed: " + (e.code || e.message));
+    }
   });
 }
 function signOutUser() {
@@ -275,39 +302,79 @@ function getDisplayName() {
   if (currentUser && currentUser.displayName) return currentUser.displayName.split(" ")[0];
   return "there";
 }
-function openNicknamePrompt() {
+function openNicknamePrompt(onboarding) {
   var wrap = el("div", {});
-  wrap.appendChild(el("div", { class:"h-title", text:"What should we call you?" }));
+  wrap.appendChild(el("div", { class:"h-title", text: onboarding ? "Let's personalize HabitFlow" : "Personalize" }));
   wrap.appendChild(el("div", { class:"h-body", style:"margin:8px 0 14px 0;", text:"Pick a nickname \u2014 we'll use it to greet you and celebrate your streaks." }));
   var nickInput = el("input", { placeholder:"Nickname", value: DATA.settings.nickname || (currentUser && currentUser.displayName ? currentUser.displayName.split(" ")[0] : "") });
   wrap.appendChild(nickInput);
-  var row = el("div", { class:"row", style:"margin-top:8px;" });
-  var skipBtn = el("button", { class:"btn btn-outline", style:"flex:1;", text:"Skip" });
-  skipBtn.addEventListener("click", function(){ nicknamePromptDismissed = true; closeModal(); });
+  wrap.appendChild(el("label", { class:"field-label", text:"Background color" }));
+  var swatchGrid = el("div", { class:"icon-grid" });
+  var chosenBg = DATA.settings.bgColor || "";
+  function markActive(container, value) {
+    container.querySelectorAll(".color-opt").forEach(function(x){ x.textContent=""; x.style.outline="none"; });
+    var match = container.querySelector('[data-swatch="'+value+'"]');
+    if (match) { match.textContent="\u2713"; match.style.outline="2px solid "+value; match.style.outlineOffset="2px"; }
+  }
+  BG_PRESETS.forEach(function(c){
+    var b = el("button", { class:"color-opt", style:"background:"+c+";border:1px solid var(--outline);", text: chosenBg===c?"\u2713":"" });
+    b.setAttribute("data-swatch", c);
+    if (chosenBg===c) { b.style.outline="2px solid "+c; b.style.outlineOffset="2px"; }
+    b.addEventListener("click", function(){ chosenBg=c; markActive(swatchGrid, c); customColorInput.value=c; });
+    swatchGrid.appendChild(b);
+  });
+  wrap.appendChild(swatchGrid);
+  var customRow = el("div", { style:"display:flex;align-items:center;gap:10px;margin-top:8px;" });
+  var customColorInput = el("input", { type:"color", value: chosenBg || "#F9FBF8", style:"width:44px;height:34px;padding:0;border:none;border-radius:8px;cursor:pointer;" });
+  customColorInput.addEventListener("input", function(){ chosenBg = customColorInput.value; markActive(swatchGrid, chosenBg); });
+  customRow.appendChild(customColorInput);
+  customRow.appendChild(el("div", { class:"h-body", style:"font-size:12px;", text:"...or pick your own shade" }));
+  wrap.appendChild(customRow);
+  var resetBgBtn = el("button", { class:"btn-text", style:"margin-top:8px;font-size:12px;", text:"Use default background" });
+  resetBgBtn.addEventListener("click", function(){ chosenBg=""; swatchGrid.querySelectorAll(".color-opt").forEach(function(x){x.textContent="";x.style.outline="none";}); });
+  wrap.appendChild(resetBgBtn);
+
+  var row = el("div", { class:"row", style:"margin-top:16px;" });
+  if (onboarding) {
+    var skipBtn = el("button", { class:"btn btn-outline", style:"flex:1;", text:"Skip" });
+    skipBtn.addEventListener("click", function(){ nicknamePromptDismissed = true; closeModal(); });
+    row.appendChild(skipBtn);
+  }
   var saveBtn = el("button", { class:"btn btn-primary", style:"flex:1;", text:"Save" });
   saveBtn.addEventListener("click", function() {
     var v = nickInput.value.trim();
     DATA.settings.nickname = v || getDisplayName();
-    save(); closeModal(); render();
+    DATA.settings.bgColor = chosenBg;
+    save(); applyTheme(); closeModal(); render();
   });
-  row.appendChild(skipBtn); row.appendChild(saveBtn);
+  row.appendChild(saveBtn);
   wrap.appendChild(row);
   openModal(wrap, true);
 }
 function showCelebration(msg) {
   var existing = document.getElementById("celebration-banner");
   if (existing) existing.remove();
-  var banner = el("div", { id:"celebration-banner", class:"celebration", text: msg });
+  var banner = el("div", { id:"celebration-banner", class:"celebration" });
+  banner.appendChild(el("div", { style:"font-size:22px;margin-bottom:2px;", text:"\uD83C\uDF89\u2728\uD83C\uDF89" }));
+  banner.appendChild(el("div", { text: msg }));
+  banner.addEventListener("click", function(){ dismissCelebration(banner); });
   document.getElementById("app").appendChild(banner);
   setTimeout(function(){ banner.classList.add("show"); }, 10);
-  setTimeout(function(){
-    banner.classList.remove("show");
-    setTimeout(function(){ if (banner.parentNode) banner.remove(); }, 300);
-  }, 3200);
+  setTimeout(function(){ dismissCelebration(banner); }, 3800);
 }
-function triggerStreakCelebrationIfMilestone(habit, streak) {
-  if (streak > 0 && streak % 5 === 0) {
-    showCelebration("\uD83C\uDF89 Yaay " + getDisplayName() + "! You've completed " + streak + " days of \"" + habit.name + "\"!");
+function dismissCelebration(banner) {
+  if (!banner.parentNode) return;
+  banner.classList.remove("show");
+  setTimeout(function(){ if (banner.parentNode) banner.remove(); }, 300);
+}
+// Compares the streak count before and after a completion so a milestone is
+// never missed, even if several days were logged at once (e.g. via backfill).
+function celebrateIfCrossedMilestone(habit, prevStreak, newStreak) {
+  prevStreak = prevStreak || 0;
+  if (newStreak <= prevStreak || newStreak < 5) return;
+  var justCrossed = Math.floor(newStreak / 5) > Math.floor(prevStreak / 5);
+  if (justCrossed) {
+    showCelebration("Yaay " + getDisplayName() + "! You've completed " + newStreak + " days of \"" + habit.name + "\"!");
   }
 }
 function canMarkOn(habit, iso) { return iso >= habit.startDate && iso <= todayISO(); }
@@ -315,30 +382,36 @@ function handleToggleToday(habit) {
   var today = todayISO();
   if (!canMarkOn(habit, today)) { showSnackbar("This habit starts " + formatMedium(habit.startDate)); return; }
   var wasComplete = isComplete(habit.id, today);
+  var prevStreak = computeStats(habit, today).currentStreak;
   toggleCompletion(habit, today);
   if (!wasComplete) {
-    var stats = computeStats(habit, today);
-    triggerStreakCelebrationIfMilestone(habit, stats.currentStreak);
+    var newStreak = computeStats(habit, today).currentStreak;
+    celebrateIfCrossedMilestone(habit, prevStreak, newStreak);
   }
   render();
 }
+// One plain checkbox per day since the habit's start date, filled only once
+// that day is marked complete. The newest box (today) always sits at the end.
 function buildHeatmapGrid(habit) {
-  var weeks = 10;
   var today = todayISO();
-  var totalDays = weeks * 7;
-  var startIso = addDays(today, -(totalDays - 1));
-  var stats = computeStats(habit, today);
   var grid = el("div", { class:"heatmap-grid" });
-  var leadDow = isoDayOfWeek(startIso);
-  for (var i=1;i<leadDow;i++) grid.appendChild(el("div",{class:"heat-cell blank"}));
-  var d = startIso;
+  var leadDow = isoDayOfWeek(habit.startDate);
+  for (var i=1;i<leadDow;i++) grid.appendChild(el("div",{class:"heat-cell invisible"}));
+  var d = habit.startDate;
   while (d <= today) {
-    var cls = "heat-cell";
-    if (d < habit.startDate) cls += " blank";
-    else if (stats.completedDays[d]) cls += " done";
-    else if (isScheduledOn(habit, d)) cls += " missed";
-    else cls += " blank";
-    grid.appendChild(el("div", { class:cls, title:d }));
+    var doneDay = isComplete(habit.id, d);
+    var cell = el("div", { class:"heat-cell"+(doneDay?" done":""), title: d });
+    cell.addEventListener("click", function(dateIso){ return function(){
+      var wasComplete = isComplete(habit.id, dateIso);
+      var prevStreak = dateIso===today ? computeStats(habit, today).currentStreak : 0;
+      setCompletion(habit, dateIso, !wasComplete);
+      if (dateIso===today && !wasComplete) {
+        var newStreak = computeStats(habit, today).currentStreak;
+        celebrateIfCrossedMilestone(habit, prevStreak, newStreak);
+      }
+      render();
+    };}(d));
+    grid.appendChild(cell);
     d = addDays(d,1);
   }
   return el("div", { class:"heatmap-wrap" }, [grid]);
@@ -458,6 +531,7 @@ function render() {
   var root = document.getElementById("content-root");
   root.innerHTML = "";
 
+  if (!authChecked) { root.appendChild(renderSplashScreen()); return; }
   if (!currentUser) { root.appendChild(renderLoginScreen()); return; }
 
   var content = el("div", { class:"content", id:"scroll-content" });
@@ -476,11 +550,22 @@ function render() {
   for (var gi=0; gi<grids.length; gi++) grids[gi].scrollLeft = grids[gi].scrollWidth;
 }
 
+function renderSplashScreen() {
+  var wrap = el("div", { class:"splash-screen" });
+  wrap.appendChild(el("div", { text:"\uD83D\uDD25", style:"font-size:40px;" }));
+  wrap.appendChild(el("div", { class:"splash-spinner" }));
+  return wrap;
+}
 function renderLoginScreen() {
   var wrap = el("div", { class:"login-screen" });
-  wrap.appendChild(el("div", { text:"\uD83D\uDD25", style:"font-size:48px;margin-bottom:16px;" }));
+  wrap.appendChild(el("div", { class:"hero-illustration", text:"\uD83D\uDD25" }));
   wrap.appendChild(el("div", { class:"h-headline", text:"HabitFlow" }));
-  wrap.appendChild(el("div", { class:"h-body", style:"margin:12px 0 28px 0;", text:"Sign in with Google to sync your habits across every device you use." }));
+  wrap.appendChild(el("div", { class:"h-body", style:"margin:10px 0 22px 0;max-width:320px;", text:"Build better days, one habit at a time. Track streaks, journal your progress, and stay consistent \u2014 all synced to your account." }));
+  var features = el("div", { style:"text-align:left;width:100%;max-width:320px;margin-bottom:24px;" });
+  [["\uD83D\uDD25","Track daily streaks & consistency"],["\uD83D\uDCD6","Journal your wins, moods and photos"],["\u2601\uFE0F","Synced everywhere you sign in"]].forEach(function(f){
+    features.appendChild(el("div", { class:"feature-row" }, [ el("span",{class:"emoji",text:f[0]}), el("span",{class:"h-body",text:f[1]}) ]));
+  });
+  wrap.appendChild(features);
   var btn = el("button", { class:"google-btn" }, [
     el("span", { html: '<svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.85.86-3.04.86-2.34 0-4.32-1.58-5.03-3.71H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.97 10.71A5.4 5.4 0 0 1 3.68 9c0-.59.1-1.17.29-1.71V4.96H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.04l3.01-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.59-2.59C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.96l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/></svg>' }),
     el("span", { text:"Sign in with Google" })
@@ -699,8 +784,9 @@ function openHabitDetail(habitId) {
       var completeBtn = el("button", { class:"btn btn-primary btn-full", style:"margin-top:14px;"+(doneToday?"background:"+habit.color+";":""), text: doneToday?"\u2713 Completed today":"Mark Complete" });
       completeBtn.addEventListener("click", function(){
         var wasComplete = isComplete(habit.id, today);
+        var prevStreak = computeStats(habit, today).currentStreak;
         toggleCompletion(habit, today);
-        if (!wasComplete) { var stats2 = computeStats(habit, today); triggerStreakCelebrationIfMilestone(habit, stats2.currentStreak); }
+        if (!wasComplete) { var newStreak = computeStats(habit, today).currentStreak; celebrateIfCrossedMilestone(habit, prevStreak, newStreak); }
         closeModal(); openHabitDetail(habitId);
       });
       wrap.appendChild(completeBtn);
@@ -785,11 +871,15 @@ function openBackfillDialog(habit) {
   okBtn.addEventListener("click", function() {
     var n = parseInt(daysInput.value) || 0;
     if (n<=0) return;
-    var requestedStart = addDays(todayISO(), -(n-1));
+    var today = todayISO();
+    var prevStreak = computeStats(habit, today).currentStreak;
+    var requestedStart = addDays(today, -(n-1));
     var start = requestedStart < habit.startDate ? habit.startDate : requestedStart;
     var d = start;
     var logged = 0;
-    while (d <= todayISO()) { if (isScheduledOn(habit,d)) { setCompletion(habit, d, true); logged++; } d = addDays(d,1); }
+    while (d <= today) { if (isScheduledOn(habit,d)) { setCompletion(habit, d, true); logged++; } d = addDays(d,1); }
+    var newStreak = computeStats(habit, today).currentStreak;
+    celebrateIfCrossedMilestone(habit, prevStreak, newStreak);
     save(); closeModal(); openHabitDetail(habit.id);
     showSnackbar(requestedStart < habit.startDate ? "Logged "+logged+" days (habit starts "+formatMedium(habit.startDate)+")" : "Logged "+logged+" days");
   });
@@ -989,8 +1079,8 @@ function renderSettings(content) {
   content.appendChild(el("div", { class:"h-body", style:"font-size:12px;margin:-4px 0 4px 0;display:flex;align-items:center;", html:'<span class="sync-dot online"></span> Synced to your Google account \u2014 open this page signed in on any device to see the same data.' }));
 
   var nickCard = el("div", { class:"card", style:"display:flex;align-items:center;justify-content:space-between;" }, [
-    el("div", {}, [ el("div",{class:"field-label",style:"margin-bottom:2px;",text:"Nickname"}), el("div",{style:"font-weight:600;",text: getDisplayName()}) ]),
-    (function(){ var b=el("button",{class:"btn-text",text:"Change"}); b.addEventListener("click", openNicknamePrompt); return b; })()
+    el("div", {}, [ el("div",{class:"field-label",style:"margin-bottom:2px;",text:"Nickname & background color"}), el("div",{style:"font-weight:600;",text: getDisplayName()}) ]),
+    (function(){ var b=el("button",{class:"btn-text",text:"Change"}); b.addEventListener("click", function(){ openNicknamePrompt(false); }); return b; })()
   ]);
   content.appendChild(nickCard);
 

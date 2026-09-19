@@ -143,6 +143,34 @@ label.field-label { font-size: 13px; font-weight: 600; color: var(--text-seconda
 .hero-illustration { font-size: 56px; line-height: 1; margin-bottom: 4px; }
 .feature-row { display: flex; align-items: center; gap: 12px; text-align: left; padding: 10px 0; }
 .feature-row .emoji { font-size: 22px; width: 32px; text-align: center; flex-shrink: 0; }
+.focus-icon-btn { width: 40px; height: 40px; border-radius: 50%; border: none; background: var(--primary-container); color: var(--on-primary-container); font-size: 19px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+.focus-icon-btn:active { transform: scale(.92); }
+.focus-wrap { display: flex; flex-direction: column; align-items: center; padding-top: 6px; }
+.focus-mode-label { font-size: 12px; font-weight: 700; letter-spacing: .08em; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 16px; }
+.tomato-box { position: relative; width: clamp(190px, 58vw, 300px); margin: 0 auto 20px auto; transform: scale(1); }
+.tomato-box.pulse { animation: tomatoPulse .9s ease-in-out 1; }
+@keyframes tomatoPulse { 0% { transform: scale(1); } 45% { transform: scale(1.07); filter: drop-shadow(0 0 18px var(--primary)); } 100% { transform: scale(1); filter: none; } }
+.tomato-svg { width: 100%; display: block; overflow: visible; }
+.tomato-top { transform-box: fill-box; transform-origin: 50% 88%; animation: tomatoRotate 6s linear infinite; animation-play-state: paused; }
+.tomato-top.spinning { animation-play-state: running; }
+@keyframes tomatoRotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.tomato-box.break-mode .tomato-body { filter: saturate(.82) brightness(1.05); }
+.tomato-box.break-mode .tomato-top { filter: hue-rotate(15deg) brightness(1.05); }
+.tomato-time-overlay { position: absolute; top: 52%; left: 50%; transform: translate(-50%,-50%); text-align: center; pointer-events: none; }
+.tomato-time { font-size: clamp(30px, 9vw, 42px); font-weight: 800; color: #fff; text-shadow: 0 2px 6px rgba(0,0,0,.35); }
+.tomato-status-text { font-size: 11px; color: rgba(255,255,255,.9); margin-top: 2px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.focus-static-indicator { position: absolute; top: 6%; left: 50%; width: 10px; height: 10px; border-radius: 50%; background: var(--primary); transform: translateX(-50%); opacity: 0; }
+.focus-static-indicator.active { animation: focusDotPulse 1.6s ease-in-out infinite; }
+@keyframes focusDotPulse { 0%,100% { opacity: .25; } 50% { opacity: 1; } }
+.focus-controls { display: flex; gap: 12px; margin-top: 6px; }
+.focus-duration-picker { display: flex; gap: 8px; margin: 4px 0 14px 0; }
+.duration-opt { padding: 8px 16px; border-radius: 20px; border: 1.5px solid var(--outline); background: var(--surface); color: var(--text); font-weight: 600; font-size: 13px; cursor: pointer; }
+.duration-opt.active { background: var(--primary-container); border-color: var(--primary); color: var(--on-primary-container); }
+.focus-task-input { width: 100%; max-width: 280px; margin: 0 auto 14px auto; text-align: center; display: block; }
+.focus-complete-card { text-align: center; margin-top: 12px; }
+.focus-meta { margin-top: 20px; text-align: center; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .tomato-top.spinning { animation: none !important; } }
 </style>
 </head>
 <body>
@@ -192,7 +220,7 @@ getRedirectResult(auth).catch(function(e) { console.warn("Redirect sign-in error
 // ---------- Data model ----------
 var defaultData = {
   habits: [], completions: [], journal: [],
-  settings: { theme: "system", homeView: "list", onboardingDone: false, nickname: "", bgColor: "" },
+  settings: { theme: "system", homeView: "list", onboardingDone: false, nickname: "", bgColor: "", focusSound: true },
   nextHabitId: 1, nextJournalId: 1
 };
 
@@ -526,6 +554,276 @@ function compressImage(file, callback) {
   reader.readAsDataURL(file);
 }
 
+// ---------- Focus (Pomodoro tomato timer) ----------
+var focusState = {
+  status: "idle",      // idle | running | paused | completed
+  mode: "focus",       // focus | break
+  durationSec: 25*60,
+  breakSec: 5*60,
+  longBreakSec: 15*60,
+  accumulated: 0,      // seconds already elapsed before the current running segment
+  segmentStart: null,  // Date.now() timestamp when the current running segment began
+  cycle: 1,
+  totalCycles: 4,
+  task: ""
+};
+var focusEls = null; // DOM refs while the Focus tab is mounted, so ticks don't need a full re-render
+
+function prefersReducedMotion() {
+  return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+}
+function focusIsLongBreak() { return focusState.cycle % focusState.totalCycles === 0; }
+function focusDuration() {
+  if (focusState.mode==="focus") return focusState.durationSec;
+  return focusIsLongBreak() ? focusState.longBreakSec : focusState.breakSec;
+}
+function focusElapsed() {
+  return focusState.accumulated + (focusState.segmentStart ? (Date.now()-focusState.segmentStart)/1000 : 0);
+}
+function focusRemaining() { return Math.max(0, focusDuration() - focusElapsed()); }
+function formatMMSS(s) {
+  s = Math.max(0, Math.round(s));
+  var m = Math.floor(s/60), sec = s%60;
+  return (m<10?"0":"")+m+":"+(sec<10?"0":"")+sec;
+}
+function focusStatusSentence() {
+  var rem = focusRemaining();
+  var m = Math.floor(rem/60), s = Math.round(rem%60);
+  var label = focusState.mode==="break" ? "Break" : "Focus";
+  if (focusState.status==="running") return label+" timer running. "+m+" minutes and "+s+" seconds remaining.";
+  if (focusState.status==="paused") return label+" timer paused. "+m+" minutes and "+s+" seconds remaining.";
+  if (focusState.status==="completed") return (focusState.mode==="break" ? "Break" : "Focus session")+" completed.";
+  return label+" timer ready. "+m+" minutes.";
+}
+function playChime() {
+  if (!DATA.settings.focusSound) return;
+  try {
+    var ctx = new (window.AudioContext||window.webkitAudioContext)();
+    [523.25, 659.25, 783.99].forEach(function(freq, i){
+      var o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = "sine"; o.frequency.value = freq;
+      o.connect(g); g.connect(ctx.destination);
+      var t0 = ctx.currentTime + i*0.16;
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.22, t0+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0+0.45);
+      o.start(t0); o.stop(t0+0.5);
+    });
+  } catch (e) { console.warn("Audio unavailable", e); }
+}
+
+function startFocusTimer() {
+  focusState.status = "running";
+  focusState.accumulated = 0;
+  focusState.segmentStart = Date.now();
+  render();
+}
+function pauseFocusTimer() {
+  focusState.accumulated = focusElapsed();
+  focusState.segmentStart = null;
+  focusState.status = "paused";
+  if (focusEls) { updateFocusVisual(); renderFocusControls(); }
+}
+function resumeFocusTimer() {
+  focusState.segmentStart = Date.now();
+  focusState.status = "running";
+  if (focusEls) { updateFocusVisual(); renderFocusControls(); }
+}
+function resetFocusTimer() {
+  focusState.status = "idle";
+  focusState.accumulated = 0;
+  focusState.segmentStart = null;
+  render();
+}
+function completeFocusTimer() {
+  var justFinishedMode = focusState.mode;
+  focusState.status = "completed";
+  focusState.accumulated = focusDuration();
+  focusState.segmentStart = null;
+  playChime();
+  render();
+  var box = focusEls && focusEls.tomatoBox;
+  if (box) {
+    box.classList.add("pulse");
+    box.addEventListener("animationend", function handler(){ box.classList.remove("pulse"); box.removeEventListener("animationend", handler); });
+  }
+}
+function focusContinueAfterCompletion() {
+  if (focusState.mode === "focus") { focusState.mode = "break"; }
+  else { focusState.mode = "focus"; focusState.cycle += 1; }
+  startFocusTimer();
+}
+function focusSkipToNext() {
+  if (focusState.mode === "focus") { focusState.mode = "break"; }
+  else { focusState.mode = "focus"; focusState.cycle += 1; }
+  resetFocusTimer();
+}
+setInterval(function() {
+  if (focusState.status !== "running") return;
+  var remaining = focusRemaining();
+  if (remaining <= 0) { completeFocusTimer(); return; }
+  if (currentTab==="focus" && focusEls && document.body.contains(focusEls.tomatoBox)) updateFocusVisual();
+}, 500);
+
+function buildTomatoSVG() {
+  return '<svg class="tomato-svg" viewBox="0 0 200 220" role="img" aria-hidden="true">'
+  + '<defs>'
+  + '<radialGradient id="tomBodyGrad" cx="35%" cy="28%" r="75%">'
+  + '<stop offset="0%" stop-color="#FF9078"/><stop offset="55%" stop-color="#E8432B"/><stop offset="100%" stop-color="#B92A1B"/>'
+  + '</radialGradient>'
+  + '<linearGradient id="tomLeafGrad" x1="0%" y1="0%" x2="0%" y2="100%">'
+  + '<stop offset="0%" stop-color="#82D286"/><stop offset="100%" stop-color="#3E8C46"/>'
+  + '</linearGradient>'
+  + '<clipPath id="tomBodyClip"><path d="M100,55 C60,55 28,90 28,135 C28,178 60,208 100,208 C140,208 172,178 172,135 C172,90 140,55 100,55 Z"/></clipPath>'
+  + '<filter id="tomSoftBlur" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="6"/></filter>'
+  + '</defs>'
+  + '<ellipse cx="100" cy="206" rx="58" ry="10" fill="#000" opacity="0.16" filter="url(#tomSoftBlur)"/>'
+  + '<path class="tomato-body" d="M100,55 C60,55 28,90 28,135 C28,178 60,208 100,208 C140,208 172,178 172,135 C172,90 140,55 100,55 Z" fill="url(#tomBodyGrad)"/>'
+  + '<g clip-path="url(#tomBodyClip)"><rect class="tomato-progress" x="10" y="208" width="180" height="0" fill="#FFD68F" opacity="0.32"/></g>'
+  + '<path d="M100,60 C85,95 80,150 88,205" stroke="#8f2013" stroke-width="1.4" opacity="0.14" fill="none"/>'
+  + '<path d="M100,60 C115,95 120,150 112,205" stroke="#8f2013" stroke-width="1.4" opacity="0.14" fill="none"/>'
+  + '<path d="M100,58 C100,110 100,160 100,206" stroke="#8f2013" stroke-width="1.2" opacity="0.10" fill="none"/>'
+  + '<ellipse cx="70" cy="90" rx="26" ry="18" fill="#FFFFFF" opacity="0.28"/>'
+  + '<g class="tomato-top">'
+  + '<rect x="96" y="38" width="8" height="20" rx="3" fill="#4C7A3F"/>'
+  + '<path d="M100,44 C82,36 66,40 58,52 C74,54 88,50 100,44 Z" fill="url(#tomLeafGrad)"/>'
+  + '<path d="M100,44 C118,36 134,40 142,52 C126,54 112,50 100,44 Z" fill="url(#tomLeafGrad)"/>'
+  + '<path d="M100,40 C92,26 78,20 64,24 C74,36 86,40 100,40 Z" fill="url(#tomLeafGrad)"/>'
+  + '<path d="M100,40 C108,26 122,20 136,24 C126,36 114,40 100,40 Z" fill="url(#tomLeafGrad)"/>'
+  + '<path d="M100,38 C100,22 96,12 100,4 C104,12 100,22 100,38 Z" fill="url(#tomLeafGrad)"/>'
+  + '<circle cx="100" cy="42" r="5" fill="#2F5B33"/>'
+  + '</g>'
+  + '</svg>';
+}
+
+function updateFocusVisual() {
+  if (!focusEls) return;
+  var remaining = focusRemaining();
+  var dur = focusDuration();
+  var progress = dur>0 ? Math.min(1, Math.max(0, 1 - remaining/dur)) : 0;
+  focusEls.timeText.textContent = formatMMSS(remaining);
+  focusEls.statusText.textContent = focusState.mode==="break" ? (focusIsLongBreak()?"Long Break":"Break") : "Focus Session";
+  var maxH = 150, y = 208 - progress*maxH;
+  focusEls.progressRect.setAttribute("y", String(y));
+  focusEls.progressRect.setAttribute("height", String(208-y));
+  var running = focusState.status==="running";
+  var reduced = prefersReducedMotion();
+  focusEls.topGroup.classList.toggle("spinning", running && !reduced);
+  if (focusEls.staticDot) focusEls.staticDot.classList.toggle("active", running && reduced);
+  focusEls.tomatoBox.classList.toggle("break-mode", focusState.mode==="break");
+  focusEls.srRegion.textContent = focusStatusSentence();
+  if (focusEls.cycleLine) focusEls.cycleLine.textContent = "Cycle "+focusState.cycle+" of "+focusState.totalCycles;
+}
+
+function renderFocusControls() {
+  if (!focusEls) return;
+  var c = focusEls.controlsContainer;
+  c.innerHTML = "";
+  if (focusState.status==="idle") {
+    var startBtn = el("button", { class:"btn btn-primary", text: focusState.mode==="break" ? "Start Break" : "Start Focus" });
+    startBtn.addEventListener("click", startFocusTimer);
+    c.appendChild(startBtn);
+  } else if (focusState.status==="running") {
+    var pauseBtn = el("button", { class:"btn btn-outline", text:"Pause" });
+    pauseBtn.addEventListener("click", pauseFocusTimer);
+    var stopBtn = el("button", { class:"btn btn-outline", text:"Reset" });
+    stopBtn.addEventListener("click", resetFocusTimer);
+    c.appendChild(pauseBtn); c.appendChild(stopBtn);
+  } else if (focusState.status==="paused") {
+    var resumeBtn = el("button", { class:"btn btn-primary", text:"Resume" });
+    resumeBtn.addEventListener("click", resumeFocusTimer);
+    var resetBtn = el("button", { class:"btn btn-outline", text:"Reset" });
+    resetBtn.addEventListener("click", resetFocusTimer);
+    c.appendChild(resumeBtn); c.appendChild(resetBtn);
+  }
+}
+
+function renderFocusScreen(content) {
+  content.appendChild(el("div", { class:"topbar", style:"padding-left:0;padding-right:0;" }, [el("div",{class:"h-headline",text:"Focus"})]));
+
+  var wrap = el("div", { class:"focus-wrap" });
+
+  if (focusState.status==="completed") {
+    var justFinishedBreak = focusState.mode==="break";
+    var card = el("div", { class:"focus-complete-card" });
+    card.appendChild(el("div", { style:"font-size:44px;", text: justFinishedBreak ? "\u2600\uFE0F" : "\uD83C\uDF45" }));
+    card.appendChild(el("div", { class:"h-title", style:"margin-top:8px;", text: justFinishedBreak ? "Break Complete!" : "Focus Complete!" }));
+    card.appendChild(el("div", { class:"h-body", style:"margin-top:4px;", text: justFinishedBreak ? "Ready for another round?" : Math.round(focusState.durationSec/60)+" minutes focused." }));
+    var row = el("div", { class:"focus-controls", style:"margin-top:20px;justify-content:center;" });
+    var primaryBtn = el("button", { class:"btn btn-primary", text: justFinishedBreak ? "Start Focus" : "Start Break" });
+    primaryBtn.addEventListener("click", focusContinueAfterCompletion);
+    row.appendChild(primaryBtn);
+    if (!justFinishedBreak) {
+      var skipBtn = el("button", { class:"btn btn-outline", text:"Skip Break" });
+      skipBtn.addEventListener("click", focusSkipToNext);
+      row.appendChild(skipBtn);
+    }
+    card.appendChild(row);
+    wrap.appendChild(card);
+    content.appendChild(wrap);
+    focusEls = null;
+    return;
+  }
+
+  wrap.appendChild(el("div", { class:"focus-mode-label", text: focusState.mode==="break" ? (focusIsLongBreak()?"LONG BREAK":"BREAK") : "FOCUS SESSION" }));
+
+  var tomatoBox = el("div", { class:"tomato-box"+(focusState.mode==="break"?" break-mode":""), html: buildTomatoSVG() });
+  var overlay = el("div", { class:"tomato-time-overlay" }, [
+    el("div", { class:"tomato-time", text: formatMMSS(focusRemaining()) }),
+    el("div", { class:"tomato-status-text", text: focusState.mode==="break" ? "Break" : "Focus Session" })
+  ]);
+  tomatoBox.appendChild(overlay);
+  var staticDot = el("div", { class:"focus-static-indicator" });
+  tomatoBox.appendChild(staticDot);
+  wrap.appendChild(tomatoBox);
+
+  var srRegion = el("div", { class:"sr-only", "aria-live":"polite" });
+  wrap.appendChild(srRegion);
+
+  if (focusState.status==="idle") {
+    var durWrap = el("div", { class:"focus-duration-picker" });
+    if (focusState.mode==="focus") {
+      [15,25,45].forEach(function(mins){
+        var opt = el("button", { class:"duration-opt"+(focusState.durationSec===mins*60?" active":""), text: mins+" min" });
+        opt.addEventListener("click", function(){ focusState.durationSec = mins*60; render(); });
+        durWrap.appendChild(opt);
+      });
+      wrap.appendChild(durWrap);
+      var taskInput = el("input", { class:"focus-task-input", placeholder:"What are you focusing on? (optional)", value: focusState.task });
+      taskInput.addEventListener("input", function(){ focusState.task = taskInput.value; });
+      wrap.appendChild(taskInput);
+    }
+  }
+
+  var controlsContainer = el("div", { class:"focus-controls" });
+  wrap.appendChild(controlsContainer);
+
+  var meta = el("div", { class:"focus-meta" });
+  var cycleLine = el("div", { class:"h-body", style:"font-size:12px;", text:"Cycle "+focusState.cycle+" of "+focusState.totalCycles });
+  meta.appendChild(cycleLine);
+  if (focusState.task && focusState.mode==="focus") meta.appendChild(el("div", { class:"h-body", style:"font-size:12px;margin-top:4px;", text:"Working on: "+focusState.task }));
+  var soundToggle = el("button", { class:"btn-text", style:"font-size:12px;margin-top:10px;", text: DATA.settings.focusSound ? "\uD83D\uDD14 Sound on" : "\uD83D\uDD15 Sound off" });
+  soundToggle.addEventListener("click", function(){ DATA.settings.focusSound = !DATA.settings.focusSound; save(); soundToggle.textContent = DATA.settings.focusSound ? "\uD83D\uDD14 Sound on" : "\uD83D\uDD15 Sound off"; });
+  meta.appendChild(soundToggle);
+  wrap.appendChild(meta);
+
+  content.appendChild(wrap);
+
+  focusEls = {
+    tomatoBox: tomatoBox,
+    topGroup: tomatoBox.querySelector(".tomato-top"),
+    progressRect: tomatoBox.querySelector(".tomato-progress"),
+    timeText: overlay.querySelector(".tomato-time"),
+    statusText: overlay.querySelector(".tomato-status-text"),
+    staticDot: staticDot,
+    controlsContainer: controlsContainer,
+    srRegion: srRegion,
+    cycleLine: cycleLine
+  };
+  renderFocusControls();
+  updateFocusVisual();
+}
+
 // ---------- Rendering ----------
 function render() {
   var root = document.getElementById("content-root");
@@ -537,6 +835,7 @@ function render() {
   var content = el("div", { class:"content", id:"scroll-content" });
   if (currentTab==="home") renderHome(content);
   else if (currentTab==="calendar") renderCalendarTab(content);
+  else if (currentTab==="focus") renderFocusScreen(content);
   else if (currentTab==="stats") renderStats(content);
   else if (currentTab==="journal") renderJournalTab(content);
   else if (currentTab==="settings") renderSettings(content);
@@ -577,7 +876,7 @@ function renderLoginScreen() {
 }
 
 function renderBottomNav() {
-  var items = [["home","\uD83C\uDFE0","Home"],["calendar","\uD83D\uDCC5","Calendar"],["stats","\uD83D\uDCCA","Stats"],["journal","\uD83D\uDCD6","Journal"],["settings","\u2699\uFE0F","Settings"]];
+  var items = [["home","\uD83C\uDFE0","Home"],["calendar","\uD83D\uDCC5","Calendar"],["focus","\uD83C\uDF45","Focus"],["stats","\uD83D\uDCCA","Stats"],["journal","\uD83D\uDCD6","Journal"],["settings","\u2699\uFE0F","Settings"]];
   var nav = el("div", { class:"bottomnav" });
   items.forEach(function(it) {
     var btn = el("button", { class:"navitem"+(currentTab===it[0]?" active":"") }, [el("span",{class:"icon",text:it[1]}), el("span",{text:it[2]})]);
@@ -595,10 +894,15 @@ function renderHome(content) {
   var doneToday = scheduledToday.filter(function(h){ return isComplete(h.id, today); }).length;
   var pct = scheduledToday.length ? Math.round(doneToday/scheduledToday.length*100) : 0;
 
-  var top = el("div", { class:"topbar" }, [
-    el("div", { class:"h-headline", text: greeting()+", "+getDisplayName()+" \uD83D\uDC4B" }),
-    el("div", { class:"h-body", text: formatHeaderDate(today) })
+  var top = el("div", { class:"topbar", style:"display:flex;align-items:flex-start;justify-content:space-between;" }, [
+    el("div", {}, [
+      el("div", { class:"h-headline", text: greeting()+", "+getDisplayName()+" \uD83D\uDC4B" }),
+      el("div", { class:"h-body", text: formatHeaderDate(today) })
+    ])
   ]);
+  var focusIconBtn = el("button", { class:"focus-icon-btn", title:"Focus timer", text:"\uD83C\uDF45" });
+  focusIconBtn.addEventListener("click", function(){ currentTab="focus"; render(); });
+  top.appendChild(focusIconBtn);
   content.appendChild(top);
 
   var summary = el("div", { class:"summary-card" }, [

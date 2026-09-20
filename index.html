@@ -159,9 +159,10 @@ label.field-label { font-size: 13px; font-weight: 600; color: var(--text-seconda
 .tomato-time { font-size: clamp(20px, 6vw, 28px); font-weight: 800; color: #7A2115; text-shadow: 0 1px 2px rgba(255,255,255,.5); }
 .tomato-status-text { font-size: 9px; color: #7A2115; opacity: .75; margin-top: 1px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .focus-controls { display: flex; gap: 12px; margin-top: 6px; }
-.focus-duration-picker { display: flex; gap: 8px; margin: 4px 0 14px 0; }
-.duration-opt { padding: 8px 16px; border-radius: 20px; border: 1.5px solid var(--outline); background: var(--surface); color: var(--text); font-weight: 600; font-size: 13px; cursor: pointer; }
-.duration-opt.active { background: var(--primary-container); border-color: var(--primary); color: var(--on-primary-container); }
+.focus-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 3px; background: var(--surface-variant); outline: none; cursor: pointer; }
+.focus-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 22px; height: 22px; border-radius: 50%; background: var(--primary); border: 3px solid var(--surface); box-shadow: 0 1px 4px rgba(0,0,0,.3); cursor: pointer; }
+.focus-slider::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: var(--primary); border: 3px solid var(--surface); box-shadow: 0 1px 4px rgba(0,0,0,.3); cursor: pointer; border: none; }
+.focus-slider::-moz-range-track { height: 6px; border-radius: 3px; background: var(--surface-variant); }
 .focus-task-input { width: 100%; max-width: 280px; margin: 0 auto 14px auto; text-align: center; display: block; }
 .focus-complete-card { text-align: center; margin-top: 12px; }
 .focus-meta { margin-top: 20px; text-align: center; }
@@ -555,7 +556,6 @@ var focusState = {
   mode: "focus",       // focus | break
   durationSec: 25*60,
   breakSec: 5*60,
-  longBreakSec: 15*60,
   accumulated: 0,      // seconds already elapsed before the current running segment
   segmentStart: null,  // Date.now() timestamp when the current running segment began
   cycle: 1,
@@ -567,10 +567,8 @@ var focusEls = null; // DOM refs while the Focus tab is mounted, so ticks don't 
 function prefersReducedMotion() {
   return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 }
-function focusIsLongBreak() { return focusState.cycle % focusState.totalCycles === 0; }
 function focusDuration() {
-  if (focusState.mode==="focus") return focusState.durationSec;
-  return focusIsLongBreak() ? focusState.longBreakSec : focusState.breakSec;
+  return focusState.mode==="focus" ? focusState.durationSec : focusState.breakSec;
 }
 function focusElapsed() {
   return focusState.accumulated + (focusState.segmentStart ? (Date.now()-focusState.segmentStart)/1000 : 0);
@@ -605,6 +603,61 @@ function playChime() {
       o.start(t0); o.stop(t0+0.5);
     });
   } catch (e) { console.warn("Audio unavailable", e); }
+}
+
+// Slider-based settings for focus length, rest length and number of cycles.
+function openFocusSettingsModal() {
+  if (focusState.status==="running" || focusState.status==="paused") {
+    showSnackbar("Finish or reset the current session to change timer settings.");
+    return;
+  }
+  var wrap = el("div", {});
+  wrap.appendChild(el("div", { class:"h-title", text:"Timer Settings" }));
+  wrap.appendChild(el("div", { class:"h-body", style:"margin:6px 0 16px 0;", text:"Slide to adjust \u2014 changes apply to your next session." }));
+
+  var focusMin = Math.round(focusState.durationSec/60);
+  var breakMin = Math.round(focusState.breakSec/60);
+  var cycles = focusState.totalCycles;
+
+  function sliderRow(label, min, max, step, value, unit, onChange) {
+    var row = el("div", { style:"margin-bottom:20px;" });
+    var head = el("div", { style:"display:flex;justify-content:space-between;margin-bottom:8px;" }, [
+      el("div", { style:"font-weight:600;font-size:14px;", text:label }),
+      el("div", { class:"slider-value", style:"font-weight:700;color:var(--primary);font-size:14px;", text: value+" "+unit })
+    ]);
+    row.appendChild(head);
+    var input = el("input", { type:"range", class:"focus-slider", min:String(min), max:String(max), step:String(step), value:String(value) });
+    input.addEventListener("input", function(){
+      var v = parseInt(input.value);
+      head.querySelector(".slider-value").textContent = v+" "+unit;
+      onChange(v);
+    });
+    row.appendChild(input);
+    return row;
+  }
+
+  wrap.appendChild(sliderRow("Focus time", 5, 90, 5, focusMin, "min", function(v){ focusMin=v; }));
+  wrap.appendChild(sliderRow("Rest time", 1, 30, 1, breakMin, "min", function(v){ breakMin=v; }));
+  wrap.appendChild(sliderRow("Cycles", 1, 8, 1, cycles, focusState.totalCycles===1?"cycle":"cycles", function(v){ cycles=v; }));
+
+  var row = el("div", { class:"row", style:"margin-top:8px;" });
+  var cancelBtn = el("button", { class:"btn btn-outline", style:"flex:1;", text:"Cancel" });
+  cancelBtn.addEventListener("click", closeModal);
+  var saveBtn = el("button", { class:"btn btn-primary", style:"flex:1;", text:"Save" });
+  saveBtn.addEventListener("click", function(){
+    focusState.durationSec = focusMin*60;
+    focusState.breakSec = breakMin*60;
+    focusState.totalCycles = cycles;
+    focusState.cycle = Math.min(focusState.cycle, cycles);
+    focusState.status = "idle";
+    focusState.accumulated = 0;
+    focusState.segmentStart = null;
+    closeModal();
+    render();
+  });
+  row.appendChild(cancelBtn); row.appendChild(saveBtn);
+  wrap.appendChild(row);
+  openModal(wrap, true);
 }
 
 function startFocusTimer() {
@@ -649,8 +702,13 @@ function focusContinueAfterCompletion() {
   startFocusTimer();
 }
 function focusSkipToNext() {
-  if (focusState.mode === "focus") { focusState.mode = "break"; }
-  else { focusState.mode = "focus"; focusState.cycle += 1; }
+  focusState.mode = "focus";
+  focusState.cycle += 1;
+  resetFocusTimer();
+}
+function focusStartNewSet() {
+  focusState.mode = "focus";
+  focusState.cycle = 1;
   resetFocusTimer();
 }
 setInterval(function() {
@@ -728,7 +786,7 @@ function updateFocusVisual() {
   var remaining = focusRemaining();
   var dur = focusDuration();
   focusEls.timeText.textContent = formatMMSS(remaining);
-  focusEls.statusText.textContent = focusState.mode==="break" ? (focusIsLongBreak()?"Long Break":"Break") : "Focus Session";
+  focusEls.statusText.textContent = focusState.mode==="break" ? "Break" : "Focus Session";
   // The dial ring rotates from fully-wound (start) back to 0 (rest) as the
   // real elapsed time increases - driven directly by the clock, not a loop.
   var frac = dur>0 ? Math.max(0, Math.min(1, remaining/dur)) : 0;
@@ -764,33 +822,51 @@ function renderFocusControls() {
 }
 
 function renderFocusScreen(content) {
-  content.appendChild(el("div", { class:"topbar", style:"padding-left:0;padding-right:0;" }, [el("div",{class:"h-headline",text:"Focus"})]));
+  var topbar = el("div", { class:"topbar", style:"padding-left:0;padding-right:0;display:flex;align-items:center;justify-content:space-between;" }, [
+    el("div",{class:"h-headline",text:"Focus"})
+  ]);
+  var gearBtn = el("button", { class:"focus-icon-btn", title:"Timer settings", text:"\u2699\uFE0F" });
+  gearBtn.addEventListener("click", openFocusSettingsModal);
+  topbar.appendChild(gearBtn);
+  content.appendChild(topbar);
 
   var wrap = el("div", { class:"focus-wrap" });
 
   if (focusState.status==="completed") {
     var justFinishedBreak = focusState.mode==="break";
+    var setJustFinished = justFinishedBreak && focusState.cycle >= focusState.totalCycles;
     var card = el("div", { class:"focus-complete-card" });
-    card.appendChild(el("div", { style:"font-size:44px;", text: justFinishedBreak ? "\u2600\uFE0F" : "\uD83C\uDF45" }));
-    card.appendChild(el("div", { class:"h-title", style:"margin-top:8px;", text: justFinishedBreak ? "Break Complete!" : "Focus Complete!" }));
-    card.appendChild(el("div", { class:"h-body", style:"margin-top:4px;", text: justFinishedBreak ? "Ready for another round?" : Math.round(focusState.durationSec/60)+" minutes focused." }));
-    var row = el("div", { class:"focus-controls", style:"margin-top:20px;justify-content:center;" });
-    var primaryBtn = el("button", { class:"btn btn-primary", text: justFinishedBreak ? "Start Focus" : "Start Break" });
-    primaryBtn.addEventListener("click", focusContinueAfterCompletion);
-    row.appendChild(primaryBtn);
-    if (!justFinishedBreak) {
-      var skipBtn = el("button", { class:"btn btn-outline", text:"Skip Break" });
-      skipBtn.addEventListener("click", focusSkipToNext);
-      row.appendChild(skipBtn);
+    if (setJustFinished) {
+      card.appendChild(el("div", { style:"font-size:44px;", text:"\uD83C\uDF89" }));
+      card.appendChild(el("div", { class:"h-title", style:"margin-top:8px;", text:"Pomodoro Set Complete!" }));
+      card.appendChild(el("div", { class:"h-body", style:"margin-top:4px;", text:"You finished all "+focusState.totalCycles+" cycles. Nicely done."}));
+      var row0 = el("div", { class:"focus-controls", style:"margin-top:20px;justify-content:center;" });
+      var newSetBtn = el("button", { class:"btn btn-primary", text:"Start New Set" });
+      newSetBtn.addEventListener("click", focusStartNewSet);
+      row0.appendChild(newSetBtn);
+      card.appendChild(row0);
+    } else {
+      card.appendChild(el("div", { style:"font-size:44px;", text: justFinishedBreak ? "\u2600\uFE0F" : "\uD83C\uDF45" }));
+      card.appendChild(el("div", { class:"h-title", style:"margin-top:8px;", text: justFinishedBreak ? "Break Complete!" : "Focus Complete!" }));
+      card.appendChild(el("div", { class:"h-body", style:"margin-top:4px;", text: justFinishedBreak ? "Ready for another round?" : Math.round(focusState.durationSec/60)+" minutes focused." }));
+      var row = el("div", { class:"focus-controls", style:"margin-top:20px;justify-content:center;" });
+      var primaryBtn = el("button", { class:"btn btn-primary", text: justFinishedBreak ? "Start Focus" : "Start Break" });
+      primaryBtn.addEventListener("click", focusContinueAfterCompletion);
+      row.appendChild(primaryBtn);
+      if (!justFinishedBreak) {
+        var skipBtn = el("button", { class:"btn btn-outline", text:"Skip Break" });
+        skipBtn.addEventListener("click", focusSkipToNext);
+        row.appendChild(skipBtn);
+      }
+      card.appendChild(row);
     }
-    card.appendChild(row);
     wrap.appendChild(card);
     content.appendChild(wrap);
     focusEls = null;
     return;
   }
 
-  wrap.appendChild(el("div", { class:"focus-mode-label", text: focusState.mode==="break" ? (focusIsLongBreak()?"LONG BREAK":"BREAK") : "FOCUS SESSION" }));
+  wrap.appendChild(el("div", { class:"focus-mode-label", text: focusState.mode==="break" ? "BREAK" : "FOCUS SESSION" }));
 
   var currentMinutes = focusDuration()/60;
   var tomatoBox = el("div", { class:"tomato-box"+(focusState.mode==="break"?" break-mode":""), html: buildTomatoSVG(currentMinutes) });
@@ -804,19 +880,10 @@ function renderFocusScreen(content) {
   var srRegion = el("div", { class:"sr-only", "aria-live":"polite" });
   wrap.appendChild(srRegion);
 
-  if (focusState.status==="idle") {
-    var durWrap = el("div", { class:"focus-duration-picker" });
-    if (focusState.mode==="focus") {
-      [15,25,45].forEach(function(mins){
-        var opt = el("button", { class:"duration-opt"+(focusState.durationSec===mins*60?" active":""), text: mins+" min" });
-        opt.addEventListener("click", function(){ focusState.durationSec = mins*60; render(); });
-        durWrap.appendChild(opt);
-      });
-      wrap.appendChild(durWrap);
-      var taskInput = el("input", { class:"focus-task-input", placeholder:"What are you focusing on? (optional)", value: focusState.task });
-      taskInput.addEventListener("input", function(){ focusState.task = taskInput.value; });
-      wrap.appendChild(taskInput);
-    }
+  if (focusState.status==="idle" && focusState.mode==="focus") {
+    var taskInput = el("input", { class:"focus-task-input", placeholder:"What are you focusing on? (optional)", value: focusState.task });
+    taskInput.addEventListener("input", function(){ focusState.task = taskInput.value; });
+    wrap.appendChild(taskInput);
   }
 
   var controlsContainer = el("div", { class:"focus-controls" });

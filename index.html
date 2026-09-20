@@ -151,17 +151,13 @@ label.field-label { font-size: 13px; font-weight: 600; color: var(--text-seconda
 .tomato-box.pulse { animation: tomatoPulse .9s ease-in-out 1; }
 @keyframes tomatoPulse { 0% { transform: scale(1); } 45% { transform: scale(1.07); filter: drop-shadow(0 0 18px var(--primary)); } 100% { transform: scale(1); filter: none; } }
 .tomato-svg { width: 100%; display: block; overflow: visible; }
-.tomato-top { transform-box: fill-box; transform-origin: 50% 88%; animation: tomatoRotate 6s linear infinite; animation-play-state: paused; }
-.tomato-top.spinning { animation-play-state: running; }
-@keyframes tomatoRotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.dial-ring { transform-box: fill-box; transform-origin: 50% 50%; transition: transform 1s linear; }
+@media (prefers-reduced-motion: reduce) { .dial-ring { transition: none !important; } }
 .tomato-box.break-mode .tomato-body { filter: saturate(.82) brightness(1.05); }
-.tomato-box.break-mode .tomato-top { filter: hue-rotate(15deg) brightness(1.05); }
-.tomato-time-overlay { position: absolute; top: 52%; left: 50%; transform: translate(-50%,-50%); text-align: center; pointer-events: none; }
-.tomato-time { font-size: clamp(30px, 9vw, 42px); font-weight: 800; color: #fff; text-shadow: 0 2px 6px rgba(0,0,0,.35); }
-.tomato-status-text { font-size: 11px; color: rgba(255,255,255,.9); margin-top: 2px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-.focus-static-indicator { position: absolute; top: 6%; left: 50%; width: 10px; height: 10px; border-radius: 50%; background: var(--primary); transform: translateX(-50%); opacity: 0; }
-.focus-static-indicator.active { animation: focusDotPulse 1.6s ease-in-out infinite; }
-@keyframes focusDotPulse { 0%,100% { opacity: .25; } 50% { opacity: 1; } }
+.tomato-box.break-mode .dial-ring circle:first-child { fill: #FBEFE0; }
+.tomato-time-overlay { position: absolute; top: 58%; left: 50%; transform: translate(-50%,-50%); text-align: center; pointer-events: none; }
+.tomato-time { font-size: clamp(20px, 6vw, 28px); font-weight: 800; color: #7A2115; text-shadow: 0 1px 2px rgba(255,255,255,.5); }
+.tomato-status-text { font-size: 9px; color: #7A2115; opacity: .75; margin-top: 1px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .focus-controls { display: flex; gap: 12px; margin-top: 6px; }
 .focus-duration-picker { display: flex; gap: 8px; margin: 4px 0 14px 0; }
 .duration-opt { padding: 8px 16px; border-radius: 20px; border: 1.5px solid var(--outline); background: var(--surface); color: var(--text); font-weight: 600; font-size: 13px; cursor: pointer; }
@@ -170,7 +166,6 @@ label.field-label { font-size: 13px; font-weight: 600; color: var(--text-seconda
 .focus-complete-card { text-align: center; margin-top: 12px; }
 .focus-meta { margin-top: 20px; text-align: center; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
-@media (prefers-reduced-motion: reduce) { .tomato-top.spinning { animation: none !important; } }
 </style>
 </head>
 <body>
@@ -665,7 +660,34 @@ setInterval(function() {
   if (currentTab==="focus" && focusEls && document.body.contains(focusEls.tomatoBox)) updateFocusVisual();
 }, 500);
 
-function buildTomatoSVG() {
+function focusDialTicks(minutes) {
+  var step = minutes<=5 ? 1 : minutes<=15 ? 5 : minutes<=30 ? 5 : 15;
+  var ticks = [];
+  for (var v=minutes; v>0; v-=step) ticks.push(Math.round(v));
+  ticks.push(0);
+  return ticks;
+}
+// The numbered dial ring: static face + ticks, drawn once per duration.
+// The whole ring is rotated as a unit (see updateFocusVisual) to mimic a
+// wind-up kitchen timer slowly unwinding back to zero - the leaf never moves.
+function buildDialRingMarkup(minutes) {
+  var ticks = focusDialTicks(minutes);
+  var sweep = 300;
+  var cx=100, cy=128, r=62, tickInnerR=52, tickOuterR=60, textR=44;
+  var svg = '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="#FFF6EA"/>'
+    + '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#E8D9C5" stroke-width="2"/>';
+  ticks.forEach(function(v){
+    var a = (v/minutes) * sweep;
+    var rad = a*Math.PI/180;
+    var x1 = (cx + tickInnerR*Math.sin(rad)).toFixed(1), y1 = (cy - tickInnerR*Math.cos(rad)).toFixed(1);
+    var x2 = (cx + tickOuterR*Math.sin(rad)).toFixed(1), y2 = (cy - tickOuterR*Math.cos(rad)).toFixed(1);
+    var tx = (cx + textR*Math.sin(rad)).toFixed(1), ty = (cy - textR*Math.cos(rad)).toFixed(1);
+    svg += '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="#B5493A" stroke-width="2"/>'
+      + '<text x="'+tx+'" y="'+ty+'" font-size="13" font-weight="700" fill="#7A2115" text-anchor="middle" dominant-baseline="middle" transform="rotate('+a.toFixed(1)+' '+tx+' '+ty+')">'+v+'</text>';
+  });
+  return svg;
+}
+function buildTomatoSVG(minutes) {
   return '<svg class="tomato-svg" viewBox="0 0 200 220" role="img" aria-hidden="true">'
   + '<defs>'
   + '<radialGradient id="tomBodyGrad" cx="35%" cy="28%" r="75%">'
@@ -675,15 +697,20 @@ function buildTomatoSVG() {
   + '<stop offset="0%" stop-color="#82D286"/><stop offset="100%" stop-color="#3E8C46"/>'
   + '</linearGradient>'
   + '<clipPath id="tomBodyClip"><path d="M100,55 C60,55 28,90 28,135 C28,178 60,208 100,208 C140,208 172,178 172,135 C172,90 140,55 100,55 Z"/></clipPath>'
+  + '<clipPath id="tomDialClip"><circle cx="100" cy="128" r="62"/></clipPath>'
   + '<filter id="tomSoftBlur" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="6"/></filter>'
   + '</defs>'
   + '<ellipse cx="100" cy="206" rx="58" ry="10" fill="#000" opacity="0.16" filter="url(#tomSoftBlur)"/>'
   + '<path class="tomato-body" d="M100,55 C60,55 28,90 28,135 C28,178 60,208 100,208 C140,208 172,178 172,135 C172,90 140,55 100,55 Z" fill="url(#tomBodyGrad)"/>'
-  + '<g clip-path="url(#tomBodyClip)"><rect class="tomato-progress" x="10" y="208" width="180" height="0" fill="#FFD68F" opacity="0.32"/></g>'
-  + '<path d="M100,60 C85,95 80,150 88,205" stroke="#8f2013" stroke-width="1.4" opacity="0.14" fill="none"/>'
-  + '<path d="M100,60 C115,95 120,150 112,205" stroke="#8f2013" stroke-width="1.4" opacity="0.14" fill="none"/>'
-  + '<path d="M100,58 C100,110 100,160 100,206" stroke="#8f2013" stroke-width="1.2" opacity="0.10" fill="none"/>'
-  + '<ellipse cx="70" cy="90" rx="26" ry="18" fill="#FFFFFF" opacity="0.28"/>'
+  + '<path d="M100,60 C85,95 80,150 88,205" stroke="#8f2013" stroke-width="1.4" opacity="0.10" fill="none"/>'
+  + '<path d="M100,60 C115,95 120,150 112,205" stroke="#8f2013" stroke-width="1.4" opacity="0.10" fill="none"/>'
+  // Static face + rotating numbered ring - the ring is the ONLY moving part
+  // of the body; it turns back toward 0 as time elapses, like a wind-up dial.
+  + '<g clip-path="url(#tomDialClip)"><g class="dial-ring">' + buildDialRingMarkup(minutes) + '</g></g>'
+  + '<circle cx="100" cy="128" r="62" fill="none" stroke="#8f2013" stroke-width="2" opacity="0.25"/>'
+  + '<path class="dial-pointer" d="M92,58 L108,58 L100,74 Z" fill="#7A2115"/>'
+  + '<ellipse cx="72" cy="86" rx="20" ry="14" fill="#FFFFFF" opacity="0.18"/>'
+  // Leaf/calyx - fixed in place, never rotates.
   + '<g class="tomato-top">'
   + '<rect x="96" y="38" width="8" height="20" rx="3" fill="#4C7A3F"/>'
   + '<path d="M100,44 C82,36 66,40 58,52 C74,54 88,50 100,44 Z" fill="url(#tomLeafGrad)"/>'
@@ -700,20 +727,18 @@ function updateFocusVisual() {
   if (!focusEls) return;
   var remaining = focusRemaining();
   var dur = focusDuration();
-  var progress = dur>0 ? Math.min(1, Math.max(0, 1 - remaining/dur)) : 0;
   focusEls.timeText.textContent = formatMMSS(remaining);
   focusEls.statusText.textContent = focusState.mode==="break" ? (focusIsLongBreak()?"Long Break":"Break") : "Focus Session";
-  var maxH = 150, y = 208 - progress*maxH;
-  focusEls.progressRect.setAttribute("y", String(y));
-  focusEls.progressRect.setAttribute("height", String(208-y));
-  var running = focusState.status==="running";
-  var reduced = prefersReducedMotion();
-  focusEls.topGroup.classList.toggle("spinning", running && !reduced);
-  if (focusEls.staticDot) focusEls.staticDot.classList.toggle("active", running && reduced);
+  // The dial ring rotates from fully-wound (start) back to 0 (rest) as the
+  // real elapsed time increases - driven directly by the clock, not a loop.
+  var frac = dur>0 ? Math.max(0, Math.min(1, remaining/dur)) : 0;
+  var angle = -(frac*300);
+  if (focusEls.dialRing) focusEls.dialRing.style.transform = "rotate("+angle.toFixed(2)+"deg)";
   focusEls.tomatoBox.classList.toggle("break-mode", focusState.mode==="break");
   focusEls.srRegion.textContent = focusStatusSentence();
   if (focusEls.cycleLine) focusEls.cycleLine.textContent = "Cycle "+focusState.cycle+" of "+focusState.totalCycles;
 }
+
 
 function renderFocusControls() {
   if (!focusEls) return;
@@ -767,14 +792,13 @@ function renderFocusScreen(content) {
 
   wrap.appendChild(el("div", { class:"focus-mode-label", text: focusState.mode==="break" ? (focusIsLongBreak()?"LONG BREAK":"BREAK") : "FOCUS SESSION" }));
 
-  var tomatoBox = el("div", { class:"tomato-box"+(focusState.mode==="break"?" break-mode":""), html: buildTomatoSVG() });
+  var currentMinutes = focusDuration()/60;
+  var tomatoBox = el("div", { class:"tomato-box"+(focusState.mode==="break"?" break-mode":""), html: buildTomatoSVG(currentMinutes) });
   var overlay = el("div", { class:"tomato-time-overlay" }, [
     el("div", { class:"tomato-time", text: formatMMSS(focusRemaining()) }),
     el("div", { class:"tomato-status-text", text: focusState.mode==="break" ? "Break" : "Focus Session" })
   ]);
   tomatoBox.appendChild(overlay);
-  var staticDot = el("div", { class:"focus-static-indicator" });
-  tomatoBox.appendChild(staticDot);
   wrap.appendChild(tomatoBox);
 
   var srRegion = el("div", { class:"sr-only", "aria-live":"polite" });
@@ -811,11 +835,9 @@ function renderFocusScreen(content) {
 
   focusEls = {
     tomatoBox: tomatoBox,
-    topGroup: tomatoBox.querySelector(".tomato-top"),
-    progressRect: tomatoBox.querySelector(".tomato-progress"),
+    dialRing: tomatoBox.querySelector(".dial-ring"),
     timeText: overlay.querySelector(".tomato-time"),
     statusText: overlay.querySelector(".tomato-status-text"),
-    staticDot: staticDot,
     controlsContainer: controlsContainer,
     srRegion: srRegion,
     cycleLine: cycleLine

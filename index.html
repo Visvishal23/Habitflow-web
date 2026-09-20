@@ -42,7 +42,7 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
-#app { max-width: 480px; margin: 0 auto; min-height: 100vh; background: var(--bg); display: flex; flex-direction: column; position: relative; }
+#app { max-width: 480px; margin: 0 auto; min-height: 100vh; background: var(--bg); display: flex; flex-direction: column; position: relative; z-index: 0; }
 .app-wallpaper-layer { position: absolute; inset: 0; z-index: -1; background-size: cover; background-position: center; background-repeat: no-repeat; pointer-events: none; }
 .topbar { padding: 20px 20px 4px 20px; }
 .content { flex: 1; overflow-y: auto; padding: 0 16px 100px 16px; }
@@ -87,6 +87,23 @@ label.field-label { font-size: 13px; font-weight: 600; color: var(--text-seconda
 .modal-overlay.centered { align-items: center; padding: 20px; }
 .modal-sheet { background: var(--surface); width: 100%; max-width: 480px; margin: 0 auto; max-height: 90vh; overflow-y: auto; border-radius: 24px 24px 0 0; padding: 20px 20px calc(20px + env(safe-area-inset-bottom,0)) 20px; }
 .modal-overlay.centered .modal-sheet { border-radius: 20px; max-height: 85vh; }
+
+/* ---- Desktop shell (computer/laptop browsers get a sidebar, not a bottom bar) ---- */
+[data-device="desktop"] #app { max-width: none; }
+[data-device="desktop"] #content-root { display: flex; flex-direction: row; align-items: stretch; min-height: 100vh; }
+[data-device="desktop"] #content-root > .content { flex: 1; max-width: 760px; margin: 0 auto; padding: 32px 32px 60px 32px; }
+[data-device="desktop"] #content-root > .login-screen, [data-device="desktop"] #content-root > .splash-screen { flex: 1; width: 100%; }
+[data-device="desktop"] #content-root > .bottomnav { order: -1; position: sticky; top: 0; align-self: flex-start; flex-direction: column; width: 232px; min-width: 232px; max-width: 232px; height: 100vh; margin: 0; border-top: none; border-right: 1px solid var(--outline); justify-content: flex-start; align-items: stretch; padding: 22px 12px; gap: 3px; padding-bottom: 12px; }
+.sidenav-brand { display: none; }
+[data-device="desktop"] .sidenav-brand { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 800; padding: 6px 14px 22px 14px; }
+[data-device="desktop"] .navitem { flex-direction: row; justify-content: flex-start; gap: 12px; padding: 11px 14px; border-radius: 12px; font-size: 14px; flex: none; }
+[data-device="desktop"] .navitem .icon { font-size: 18px; }
+[data-device="desktop"] .navitem.active { background: var(--primary-container); color: var(--on-primary-container); }
+[data-device="desktop"] .fab { bottom: 32px; right: 32px; }
+[data-device="desktop"] .habit-grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+[data-device="desktop"] .modal-overlay { align-items: center; padding: 24px; }
+[data-device="desktop"] .modal-sheet { max-width: 540px; border-radius: 20px; max-height: 85vh; }
+[data-device="desktop"] .back-row { padding-top: 0; }
 .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .icon-btn { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text); width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
 .icon-btn:active { background: var(--surface-variant); }
@@ -173,6 +190,16 @@ label.field-label { font-size: 13px; font-weight: 600; color: var(--text-seconda
 .focus-meta { margin-top: 20px; text-align: center; }
 .focus-stats-card { margin-top: 18px; width: 100%; max-width: 300px; background: var(--surface); border: 1px solid var(--outline); border-radius: 16px; padding: 16px 18px; text-align: center; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+.back-row { display: flex; align-items: center; padding: 16px 0 0 0; margin-bottom: -4px; }
+.back-btn { width: 36px; height: 36px; border-radius: 50%; border: none; background: none; color: var(--text); font-size: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.back-btn:active { background: var(--surface-variant); }
+.habit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.habit-grid-card { background: var(--surface); border: 1px solid var(--outline); border-radius: var(--radius-md); padding: 12px; cursor: pointer; }
+.habit-grid-card .hg-top { display: flex; align-items: center; justify-content: space-between; }
+.habit-grid-card .hg-icon { font-size: 20px; }
+.habit-grid-card .hg-name { font-size: 13px; font-weight: 700; margin-top: 6px; line-height: 1.25; }
+.habit-grid-card .hg-sub { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+.goal-caption { font-size: 11px; margin-top: 8px; text-decoration: underline; cursor: pointer; color: var(--text-secondary); background: none; border: none; padding: 0; font-family: inherit; }
 
 /* ---- Fullscreen Clock ---- */
 .fsclock-overlay { position: fixed; inset: 0; z-index: 90; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; overflow: hidden; }
@@ -242,6 +269,30 @@ getRedirectResult(auth).catch(function(e) { console.warn("Redirect sign-in error
 (function() {
 "use strict";
 
+// ---------- Device mode (phone vs computer) ----------
+// Detected once, immediately, so the very first paint after login already
+// uses the right shell: a compact bottom-tab layout for phones, or a wider
+// sidebar layout for a computer/laptop browser.
+function detectDeviceMode() {
+  var ua = navigator.userAgent || "";
+  var mobileUA = /Android|iPhone|iPod|Windows Phone|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+  var isIPad = /iPad/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1); // iPadOS 13+ reports as "Macintosh"
+  var coarsePointer = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+  var narrowViewport = window.innerWidth <= 900;
+  var mobileLike = mobileUA || isIPad || (coarsePointer && narrowViewport);
+  return mobileLike ? "mobile" : "desktop";
+}
+var autoDetectedDeviceMode = detectDeviceMode();
+var deviceMode = autoDetectedDeviceMode;
+document.documentElement.setAttribute("data-device", deviceMode);
+// Re-run whenever settings load/change: a manual choice in Settings wins
+// over the auto-detected phone/computer guess.
+function applyDeviceMode() {
+  var override = (DATA.settings && DATA.settings.deviceModeOverride) || "auto";
+  deviceMode = (override === "mobile" || override === "desktop") ? override : autoDetectedDeviceMode;
+  document.documentElement.setAttribute("data-device", deviceMode);
+}
+
 // ---------- Data model ----------
 var defaultData = {
   habits: [], completions: [], journal: [], focusLog: {},
@@ -251,7 +302,9 @@ var defaultData = {
     fsClockStyle: { fontFamily: "system", color: "#ffffff" },
     appWallpaper: { value: "", opacity: 0.3 },
     dailyFocusGoalMin: 120,
-    autoFullscreen: false
+    autoFullscreen: false,
+    accentColor: null,
+    deviceModeOverride: "auto"
   },
   nextHabitId: 1, nextJournalId: 1
 };
@@ -265,13 +318,63 @@ var nicknamePromptDismissed = false;
 var authChecked = false;
 var BG_PRESETS = ["#F9FBF8","#FDF3E7","#FBEAEA","#EAF4FB","#F0F7EA","#F3EAFB","#FFF6E0","#12140F"];
 
+var ACCENT_PRESETS = [
+  { name:"Green", primary:"#3D6E5C", container:"#BEECD6", onContainer:"#002014" },
+  { name:"Blue", primary:"#3D5A80", container:"#D3E4FF", onContainer:"#001B3D" },
+  { name:"Purple", primary:"#6750A4", container:"#EADDFF", onContainer:"#21005D" },
+  { name:"Rose", primary:"#8E5572", container:"#FFD9E3", onContainer:"#3E001D" },
+  { name:"Amber", primary:"#8A5A00", container:"#FFDDA6", onContainer:"#2B1700" },
+  { name:"Teal", primary:"#118AB2", container:"#C6ECFF", onContainer:"#001F29" },
+  { name:"Slate", primary:"#4A4A58", container:"#DFE0F0", onContainer:"#161622" }
+];
+// Lets a custom hex still get a matching light "container" tint and a dark
+// "on container" tint, the same way the curated presets have all three.
+function hexToHsl(hex) {
+  var r=parseInt(hex.slice(1,3),16)/255, g=parseInt(hex.slice(3,5),16)/255, b=parseInt(hex.slice(5,7),16)/255;
+  var max=Math.max(r,g,b), min=Math.min(r,g,b), h=0,s=0,l=(max+min)/2;
+  if (max!==min) {
+    var d=max-min; s = l>0.5 ? d/(2-max-min) : d/(max+min);
+    if (max===r) h=(g-b)/d+(g<b?6:0); else if (max===g) h=(b-r)/d+2; else h=(r-g)/d+4;
+    h/=6;
+  }
+  return [h,s,l];
+}
+function hslToHex(h,s,l) {
+  function hue2rgb(p,q,t){ if(t<0)t+=1; if(t>1)t-=1; if(t<1/6)return p+(q-p)*6*t; if(t<1/2)return q; if(t<2/3)return p+(q-p)*(2/3-t)*6; return p; }
+  var r,g,b;
+  if (s===0) { r=g=b=l; } else {
+    var q = l<0.5 ? l*(1+s) : l+s-l*s, p = 2*l-q;
+    r=hue2rgb(p,q,h+1/3); g=hue2rgb(p,q,h); b=hue2rgb(p,q,h-1/3);
+  }
+  var toHex=function(x){ var v=Math.round(x*255).toString(16); return v.length===1?"0"+v:v; };
+  return "#"+toHex(r)+toHex(g)+toHex(b);
+}
+function deriveAccentFromHex(hex) {
+  var hsl = hexToHsl(hex);
+  return { primary: hex, container: hslToHex(hsl[0], hsl[1], 0.88), onContainer: hslToHex(hsl[0], hsl[1], 0.12) };
+}
+function applyAccentColor() {
+  var root = document.documentElement;
+  var accent = DATA.settings.accentColor;
+  if (accent && accent.primary) {
+    root.style.setProperty("--primary", accent.primary);
+    root.style.setProperty("--primary-container", accent.container);
+    root.style.setProperty("--on-primary-container", accent.onContainer);
+  } else {
+    root.style.removeProperty("--primary");
+    root.style.removeProperty("--primary-container");
+    root.style.removeProperty("--on-primary-container");
+  }
+}
 function applyTheme() {
+  applyDeviceMode();
   var root = document.documentElement;
   if (DATA.settings.theme === "light") root.setAttribute("data-theme", "light");
   else if (DATA.settings.theme === "dark") root.setAttribute("data-theme", "dark");
   else root.removeAttribute("data-theme");
   if (DATA.settings.bgColor) root.style.setProperty("--bg", DATA.settings.bgColor);
   else root.style.removeProperty("--bg");
+  applyAccentColor();
   applyAppWallpaper();
 }
 // A single wallpaper layer sits just behind #app's own content (but above its
@@ -592,6 +695,18 @@ function activeHabits() { return DATA.habits.filter(function(h){ return !h.archi
 
 // ---------- UI helpers ----------
 var currentTab = "home";
+var tabHistory = []; // stack of previously-visited tabs, for the iOS-style back arrow
+function goToTab(tab) {
+  if (tab === currentTab) return;
+  tabHistory.push(currentTab);
+  currentTab = tab;
+  render();
+}
+function goBack() {
+  if (!tabHistory.length) return;
+  currentTab = tabHistory.pop();
+  render();
+}
 var toastTimer = null;
 function showSnackbar(msg) {
   var el0 = document.getElementById("snackbar");
@@ -701,6 +816,60 @@ function openAppWallpaperModal() {
     wrap.appendChild(removeBtn);
   }
 
+  openModal(wrap, true);
+}
+
+function openAccentColorModal() {
+  var wrap = el("div", {});
+  wrap.appendChild(el("div", { class:"h-title", text:"Theme Color" }));
+  wrap.appendChild(el("div", { class:"h-body", style:"margin:6px 0 14px 0;", text:"Pick an accent color for buttons, progress bars and icons." }));
+
+  var swatchRow = el("div", { class:"icon-grid" });
+  ACCENT_PRESETS.forEach(function(p){
+    var isActive = DATA.settings.accentColor && DATA.settings.accentColor.primary===p.primary;
+    var b = el("button", { class:"color-opt", style:"background:"+p.primary+";"+(isActive?"outline:2px solid "+p.primary+";outline-offset:2px;":""), title:p.name, text:isActive?"\u2713":"" });
+    b.addEventListener("click", function(){
+      DATA.settings.accentColor = { primary:p.primary, container:p.container, onContainer:p.onContainer };
+      save(); applyAccentColor(); closeModal(); render();
+    });
+    swatchRow.appendChild(b);
+  });
+  wrap.appendChild(swatchRow);
+
+  wrap.appendChild(el("label", { class:"field-label", text:"Custom color" }));
+  var curColor = (DATA.settings.accentColor && DATA.settings.accentColor.primary) || "#3D6E5C";
+  var colorInput = el("input", { type:"color", value: curColor, style:"height:44px;padding:4px;cursor:pointer;" });
+  colorInput.addEventListener("change", function(){
+    DATA.settings.accentColor = deriveAccentFromHex(colorInput.value);
+    save(); applyAccentColor(); closeModal(); render();
+  });
+  wrap.appendChild(colorInput);
+
+  var resetBtn = el("button", { class:"btn-text", style:"display:block;margin-top:14px;", text:"Reset to default green" });
+  resetBtn.addEventListener("click", function(){
+    DATA.settings.accentColor = null;
+    save(); applyAccentColor(); closeModal(); render();
+  });
+  wrap.appendChild(resetBtn);
+
+  openModal(wrap, true);
+}
+
+function openHomeLayoutModal() {
+  var wrap = el("div", {});
+  wrap.appendChild(el("div", { class:"h-title", text:"Home Layout" }));
+  wrap.appendChild(el("div", { class:"h-body", style:"margin:6px 0 14px 0;", text:"Choose how your habits are shown on Home." }));
+  [["list","List","Full-width rows with a history strip"],["streak","Streak","Full-width rows focused on streak stats"],["grid","Grid","Compact two-column cards"]].forEach(function(opt){
+    var row = el("div", { class:"radio-row" });
+    var dot = el("div", { class:"radio-dot"+(DATA.settings.homeView===opt[0]?" active":"") });
+    row.appendChild(dot);
+    row.appendChild(el("div", {}, [ el("div",{text:opt[1]}), el("div",{class:"h-body",style:"font-size:12px;",text:opt[2]}) ]));
+    row.addEventListener("click", function(){
+      DATA.settings.homeView = opt[0];
+      save(); closeModal(); render();
+    });
+    wrap.appendChild(row);
+  });
   openModal(wrap, true);
 }
 
@@ -984,10 +1153,11 @@ function focusStatsContent() {
       frag.appendChild(el("div", { class:"h-body", style:"font-size:12px;margin-top:8px;", text: formatHoursMinutes(goalSec-totalSec)+" left to reach your "+formatHoursMinutes(goalSec)+" goal" }));
     }
   } else {
-    var setGoalBtn = el("button", { class:"btn-text", style:"font-size:12px;margin-top:8px;padding:0;", text:"Set a daily goal" });
-    setGoalBtn.addEventListener("click", openFocusSettingsModal);
-    frag.appendChild(setGoalBtn);
+    frag.appendChild(el("div", { class:"h-body", style:"font-size:12px;margin-top:8px;", text:"No daily goal set yet." }));
   }
+  var goalCaption = el("button", { class:"goal-caption", text:"Change in Settings" });
+  goalCaption.addEventListener("click", openFocusSettingsModal);
+  frag.appendChild(goalCaption);
   return frag;
 }
 function refreshFocusStats() {
@@ -1403,8 +1573,13 @@ function renderFsClockBody() {
 }
 function fsClockKeyHandler(e) { if (e.key === "Escape") closeFullscreenClock(); }
 
+var fsClockEnteredFullscreen = false;
 function openFullscreenClock() {
   closeFullscreenClock();
+  // Go into real browser fullscreen too (hides the address bar etc.), but
+  // only exit it again on close if we're the one who entered it - if the
+  // whole app was already fullscreen, leave that alone.
+  if (!isFullscreen()) { enterFullscreen(); fsClockEnteredFullscreen = true; }
   var overlay = el("div", { id:"fsclock-overlay", class:"fsclock-overlay" });
 
   var topbar = el("div", { class:"fsclock-topbar" });
@@ -1441,6 +1616,7 @@ function closeFullscreenClock() {
   document.removeEventListener("keydown", fsClockKeyHandler);
   document.body.style.overflow = "";
   fsClockMounted = false;
+  if (fsClockEnteredFullscreen) { exitFullscreen(); fsClockEnteredFullscreen = false; }
 }
 
 function openFsClockBackgroundModal() {
@@ -1557,6 +1733,13 @@ function render() {
   if (!currentUser) { root.appendChild(renderLoginScreen()); return; }
 
   var content = el("div", { class:"content", id:"scroll-content" });
+  if (tabHistory.length > 0) {
+    var backRow = el("div", { class:"back-row" });
+    var backBtn = el("button", { class:"back-btn", title:"Back", text:"\u2190" });
+    backBtn.addEventListener("click", goBack);
+    backRow.appendChild(backBtn);
+    content.appendChild(backRow);
+  }
   if (currentTab==="home") renderHome(content);
   else if (currentTab==="calendar") renderCalendarTab(content);
   else if (currentTab==="focus") renderFocusScreen(content);
@@ -1600,13 +1783,25 @@ function renderLoginScreen() {
 }
 
 function renderBottomNav() {
-  var items = [["home","\uD83C\uDFE0","Home"],["calendar","\uD83D\uDCC5","Calendar"],["focus","\uD83C\uDF45","Focus"],["stats","\uD83D\uDCCA","Stats"],["journal","\uD83D\uDCD6","Journal"]];
+  var items = [["home","\uD83C\uDFE0","Home"],["calendar","\uD83D\uDCC5","Calendar"],["focus","\uD83C\uDF45","Focus"],["stats","\uD83D\uDCCA","Stats"],["settings","\u2699\uFE0F","Settings"]];
   var nav = el("div", { class:"bottomnav" });
+  if (deviceMode === "desktop") {
+    nav.appendChild(el("div", { class:"sidenav-brand" }, [ el("span",{text:"\uD83D\uDD25"}), el("span",{text:"HabitFlow"}) ]));
+  }
   items.forEach(function(it) {
     var btn = el("button", { class:"navitem"+(currentTab===it[0]?" active":"") }, [el("span",{class:"icon",text:it[1]}), el("span",{text:it[2]})]);
-    btn.addEventListener("click", function(){ currentTab=it[0]; render(); });
+    btn.addEventListener("click", function(){ goToTab(it[0]); });
     nav.appendChild(btn);
   });
+  if (deviceMode === "desktop") {
+    nav.appendChild(el("div", { style:"flex:1;" }));
+    var journalBtn = el("button", { class:"navitem"+(currentTab==="journal"?" active":"") }, [el("span",{class:"icon",text:"\uD83D\uDCD6"}), el("span",{text:"Journal"})]);
+    journalBtn.addEventListener("click", function(){ goToTab("journal"); });
+    nav.appendChild(journalBtn);
+    var signOutBtn = el("button", { class:"navitem" }, [el("span",{class:"icon",text:"\u21AA"}), el("span",{text:"Sign out"})]);
+    signOutBtn.addEventListener("click", signOutUser);
+    nav.appendChild(signOutBtn);
+  }
   return nav;
 }
 
@@ -1624,13 +1819,19 @@ function renderHome(content) {
       el("div", { class:"h-body", text: formatHeaderDate(today) })
     ])
   ]);
-  var topIconGroup = el("div", { style:"display:flex;gap:8px;flex-shrink:0;" });
+  var topIconGroup = el("div", { style:"display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;" });
   var focusIconBtn = el("button", { class:"focus-icon-btn", title:"Focus timer", text:"\uD83C\uDF45" });
-  focusIconBtn.addEventListener("click", function(){ currentTab="focus"; render(); });
-  var settingsIconBtn = el("button", { class:"focus-icon-btn", title:"Settings", text:"\u2699\uFE0F" });
-  settingsIconBtn.addEventListener("click", function(){ currentTab="settings"; render(); });
+  focusIconBtn.addEventListener("click", function(){ goToTab("focus"); });
+  var journalIconBtn = el("button", { class:"focus-icon-btn", title:"Journal", text:"\uD83D\uDCD6" });
+  journalIconBtn.addEventListener("click", function(){ goToTab("journal"); });
+  var colorIconBtn = el("button", { class:"focus-icon-btn", title:"Theme color", text:"\uD83C\uDFA8" });
+  colorIconBtn.addEventListener("click", openAccentColorModal);
+  var layoutIconBtn = el("button", { class:"focus-icon-btn", title:"Home layout", text:"\u25A6" });
+  layoutIconBtn.addEventListener("click", openHomeLayoutModal);
   topIconGroup.appendChild(focusIconBtn);
-  topIconGroup.appendChild(settingsIconBtn);
+  topIconGroup.appendChild(journalIconBtn);
+  topIconGroup.appendChild(colorIconBtn);
+  topIconGroup.appendChild(layoutIconBtn);
   top.appendChild(topIconGroup);
   content.appendChild(top);
 
@@ -1641,22 +1842,23 @@ function renderHome(content) {
   ]);
   content.appendChild(summary);
 
-  var toggleWrap = el("div", { style:"margin-top:14px;" });
-  var toggle = el("div", { class:"toggle-group" });
-  ["list","streak"].forEach(function(mode){
-    var b = el("button", { class:"toggle-opt"+(DATA.settings.homeView===mode?" active":""), text: mode==="list"?"List":"Streak" });
-    b.addEventListener("click", function(){ DATA.settings.homeView=mode; save(); render(); });
-    toggle.appendChild(b);
-  });
-  toggleWrap.appendChild(toggle);
-  content.appendChild(toggleWrap);
-
   if (habits.length===0) { content.appendChild(emptyState("\uD83C\uDF31","Start building your routine.","Create your first habit and begin tracking your progress.","+ Create Habit",function(){openHabitForm(null);})); return; }
+
+  if (DATA.settings.homeView==="grid") {
+    var grid = el("div", { class:"habit-grid", style:"margin-top:14px;" });
+    habits.forEach(function(habit) {
+      var stats = computeStats(habit, today);
+      var done = isComplete(habit.id, today);
+      grid.appendChild(habitGridCard(habit,stats,done));
+    });
+    content.appendChild(grid);
+    return;
+  }
 
   habits.forEach(function(habit) {
     var stats = computeStats(habit, today);
     var done = isComplete(habit.id, today);
-    content.appendChild(DATA.settings.homeView==="list" ? habitListCard(habit,stats,done) : habitStreakCard(habit,stats,done));
+    content.appendChild(DATA.settings.homeView==="streak" ? habitStreakCard(habit,stats,done) : habitListCard(habit,stats,done));
   });
 }
 
@@ -1704,6 +1906,22 @@ function habitStreakCard(habit, stats, done) {
   });
   card.appendChild(metrics);
   card.appendChild(buildHeatmapGrid(habit));
+  return card;
+}
+function habitGridCard(habit, stats, done) {
+  var notStarted = todayISO() < habit.startDate;
+  var card = el("div", { class:"habit-grid-card" });
+  card.addEventListener("click", function(e){ if (e.target.closest(".check-btn")) return; openHabitDetail(habit.id); });
+  var top = el("div", { class:"hg-top" }, [
+    el("div", { class:"hg-icon", text: habit.icon })
+  ]);
+  var checkBtn = el("button", { class:"check-btn"+(done?" done":""), text: done?"\u2713":"" });
+  if (notStarted) checkBtn.setAttribute("disabled", "disabled");
+  checkBtn.addEventListener("click", function(e){ e.stopPropagation(); handleToggleToday(habit); });
+  top.appendChild(checkBtn);
+  card.appendChild(top);
+  card.appendChild(el("div", { class:"hg-name", text: habit.name }));
+  card.appendChild(el("div", { class:"hg-sub", text: notStarted ? ("\uD83D\uDD12 "+formatMedium(habit.startDate)) : ("\uD83D\uDD25 "+stats.currentStreak+" days") }));
   return card;
 }
 function emptyState(emoji, title, subtitle, actionLabel, onAction) {
@@ -2152,6 +2370,19 @@ function renderSettings(content) {
   fsCard.appendChild(autoFsRow);
   content.appendChild(fsCard);
   content.appendChild(el("div", { class:"h-body", style:"font-size:12px;margin:4px 0 0 0;", text:"Browsers only allow fullscreen right after a tap, so it can't trigger the instant the page loads \u2014 with this on, the very next tap anywhere will start it. For the address bar to never show at all, add HabitFlow to your home screen instead (Share/Menu \u2192 Add to Home Screen)." }));
+
+  content.appendChild(el("div", { class:"section-title", text:"View Mode" }));
+  var viewModeCard = el("div", { class:"card" });
+  [["auto","Automatic","Detects phone vs. computer for you"],["mobile","Mobile","Bottom tab bar, phone-style layout"],["desktop","Windows (Desktop)","Sidebar layout for a computer or laptop"]].forEach(function(vm) {
+    var row = el("div", { class:"radio-row" }, [
+      el("div",{class:"radio-dot"+((DATA.settings.deviceModeOverride||"auto")===vm[0]?" active":"")}),
+      el("div", {}, [ el("div",{text:vm[1]}), el("div",{class:"h-body",style:"font-size:12px;",text:vm[2]}) ])
+    ]);
+    row.addEventListener("click", function(){ DATA.settings.deviceModeOverride=vm[0]; save(); applyTheme(); render(); });
+    viewModeCard.appendChild(row);
+  });
+  content.appendChild(viewModeCard);
+  content.appendChild(el("div", { class:"h-body", style:"font-size:12px;margin:4px 0 0 0;", text:"Currently showing the "+(deviceMode==="desktop"?"Windows (Desktop)":"Mobile")+" layout." }));
 
   content.appendChild(el("div", { class:"section-title", text:"Data" }));
   var dataCard = el("div", { class:"card" });

@@ -167,6 +167,26 @@ label.field-label { font-size: 13px; font-weight: 600; color: var(--text-seconda
 .focus-complete-card { text-align: center; margin-top: 12px; }
 .focus-meta { margin-top: 20px; text-align: center; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+
+/* ---- Fullscreen Clock ---- */
+.fsclock-overlay { position: fixed; inset: 0; z-index: 90; display: flex; flex-direction: column; align-items: center; justify-content: center; background-size: cover; background-position: center; background-repeat: no-repeat; color: #fff; overflow: hidden; }
+.fsclock-overlay.fsclock-default-bg { background: linear-gradient(160deg, #12181f 0%, #1c2733 55%, #0d1218 100%); }
+.fsclock-topbar { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: flex-end; gap: 10px; padding: calc(16px + env(safe-area-inset-top,0)) 16px 0 16px; z-index: 2; }
+.fsclock-icon-btn { width: 42px; height: 42px; border-radius: 50%; border: none; background: rgba(0,0,0,0.32); color: #fff; font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.fsclock-icon-btn:active { transform: scale(.92); }
+.fsclock-tabs { position: relative; z-index: 2; margin-top: calc(16px + env(safe-area-inset-top,0)); background: rgba(0,0,0,0.32); }
+.fsclock-tabs .toggle-opt { color: rgba(255,255,255,0.75); }
+.fsclock-tabs .toggle-opt.active { background: #fff; color: #111; }
+.fsclock-body { flex: 1; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; z-index: 1; }
+.fsclock-time { font-size: clamp(48px, 16vw, 108px); font-weight: 200; font-variant-numeric: tabular-nums; letter-spacing: 1px; text-shadow: 0 2px 18px rgba(0,0,0,0.35); }
+.fsclock-date { font-size: clamp(14px, 3.4vw, 19px); opacity: .85; margin-top: 6px; font-weight: 500; }
+.fsclock-sw-time { font-size: clamp(40px, 13vw, 84px); font-weight: 300; font-variant-numeric: tabular-nums; text-shadow: 0 2px 18px rgba(0,0,0,0.35); }
+.fsclock-sw-controls { display: flex; gap: 14px; margin-top: 26px; }
+.fsclock-btn { background: rgba(255,255,255,0.16); color: #fff; border: 1.5px solid rgba(255,255,255,0.55); border-radius: 50px; padding: 12px 24px; font-size: 15px; font-weight: 600; cursor: pointer; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.fsclock-btn:active { opacity: .75; }
+.fsclock-btn.primary { background: #fff; color: #12140F; border-color: #fff; }
+.fsclock-lap-list { max-height: 26vh; overflow-y: auto; width: 100%; max-width: 320px; margin-top: 22px; }
+.fsclock-lap-row { display: flex; justify-content: space-between; padding: 7px 10px; border-bottom: 1px solid rgba(255,255,255,0.18); font-size: 14px; font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -216,7 +236,7 @@ getRedirectResult(auth).catch(function(e) { console.warn("Redirect sign-in error
 // ---------- Data model ----------
 var defaultData = {
   habits: [], completions: [], journal: [],
-  settings: { theme: "system", homeView: "list", onboardingDone: false, nickname: "", bgColor: "", focusSound: true },
+  settings: { theme: "system", homeView: "list", onboardingDone: false, nickname: "", bgColor: "", focusSound: true, fsClockBg: { type: "default", value: "" } },
   nextHabitId: 1, nextJournalId: 1
 };
 
@@ -531,19 +551,20 @@ function openModal(sheetEl, centered) {
 }
 
 // ---------- Image compression (keeps Firestore doc well under 1MB) ----------
-function compressImage(file, callback) {
+function compressImage(file, callback, maxDim, quality) {
+  maxDim = maxDim || 640;
+  quality = quality || 0.6;
   var reader = new FileReader();
   reader.onload = function() {
     var img = new Image();
     img.onload = function() {
-      var maxDim = 640;
       var scale = Math.min(1, maxDim / Math.max(img.width, img.height));
       var canvas = document.createElement("canvas");
       canvas.width = Math.round(img.width * scale);
       canvas.height = Math.round(img.height * scale);
       var ctx = canvas.getContext("2d");
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      callback(canvas.toDataURL("image/jpeg", 0.6));
+      callback(canvas.toDataURL("image/jpeg", quality));
     };
     img.src = reader.result;
   };
@@ -604,6 +625,33 @@ function playChime() {
     });
   } catch (e) { console.warn("Audio unavailable", e); }
 }
+// Ask for notification permission the first time it's needed (call from a
+// click handler so the browser treats it as a user gesture).
+function ensureNotificationPermission() {
+  if (!("Notification" in window)) return;
+  if (Notification.permission === "default") {
+    try { Notification.requestPermission(); } catch (e) {}
+  }
+}
+// Tells the user a focus/break segment just finished, via a system
+// notification when allowed, falling back to the in-app snackbar.
+function notifyFocusEvent(finishedMode) {
+  var title, body;
+  if (finishedMode === "focus") {
+    title = "Focus session complete";
+    body = focusState.task ? ("Nice work on \"" + focusState.task + "\". Starting your break.") : "Nice work! Starting your break.";
+  } else {
+    title = "Break complete";
+    body = "Break's over \u2014 back to focus.";
+  }
+  try {
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification(title, { body: body, tag: "habitflow-focus" });
+      return;
+    }
+  } catch (e) { console.warn("Notification unavailable", e); }
+  showSnackbar(title + " \u2014 " + body);
+}
 
 // Slider-based settings for focus length, rest length and number of cycles.
 function openFocusSettingsModal() {
@@ -661,6 +709,7 @@ function openFocusSettingsModal() {
 }
 
 function startFocusTimer() {
+  ensureNotificationPermission();
   focusState.status = "running";
   focusState.accumulated = 0;
   focusState.segmentStart = Date.now();
@@ -683,28 +732,48 @@ function resetFocusTimer() {
   focusState.segmentStart = null;
   render();
 }
+// A focus segment always flows straight into its break, and a break always
+// flows straight into the next focus segment - no "start/skip" prompt in
+// between. The only stop is once every cycle in the set has been completed.
 function completeFocusTimer() {
-  var justFinishedMode = focusState.mode;
-  focusState.status = "completed";
+  var finishedMode = focusState.mode;
   focusState.accumulated = focusDuration();
   focusState.segmentStart = null;
   playChime();
-  render();
+  notifyFocusEvent(finishedMode);
   var box = focusEls && focusEls.tomatoBox;
   if (box) {
     box.classList.add("pulse");
     box.addEventListener("animationend", function handler(){ box.classList.remove("pulse"); box.removeEventListener("animationend", handler); });
   }
+  if (finishedMode === "focus") {
+    focusState.mode = "break";
+    startFocusTimer();
+  } else if (focusState.cycle >= focusState.totalCycles) {
+    // Whole set finished - this is the one point where we actually stop
+    // and let the person choose what happens next.
+    focusState.status = "completed";
+    render();
+  } else {
+    focusState.mode = "focus";
+    focusState.cycle += 1;
+    startFocusTimer();
+  }
 }
-function focusContinueAfterCompletion() {
-  if (focusState.mode === "focus") { focusState.mode = "break"; }
-  else { focusState.mode = "focus"; focusState.cycle += 1; }
-  startFocusTimer();
-}
-function focusSkipToNext() {
-  focusState.mode = "focus";
-  focusState.cycle += 1;
-  resetFocusTimer();
+// Lets the person cut a running/paused break short and jump straight to the
+// next focus segment (or finish the set, if that was the last break).
+function skipBreakNow() {
+  if (focusState.mode !== "break") return;
+  if (focusState.cycle >= focusState.totalCycles) {
+    focusState.status = "completed";
+    focusState.accumulated = focusDuration();
+    focusState.segmentStart = null;
+    render();
+  } else {
+    focusState.mode = "focus";
+    focusState.cycle += 1;
+    startFocusTimer();
+  }
 }
 function focusStartNewSet() {
   focusState.mode = "focus";
@@ -812,12 +881,22 @@ function renderFocusControls() {
     var stopBtn = el("button", { class:"btn btn-outline", text:"Reset" });
     stopBtn.addEventListener("click", resetFocusTimer);
     c.appendChild(pauseBtn); c.appendChild(stopBtn);
+    if (focusState.mode==="break") {
+      var skipBtn1 = el("button", { class:"btn btn-outline", text:"Skip Break" });
+      skipBtn1.addEventListener("click", skipBreakNow);
+      c.appendChild(skipBtn1);
+    }
   } else if (focusState.status==="paused") {
     var resumeBtn = el("button", { class:"btn btn-primary", text:"Resume" });
     resumeBtn.addEventListener("click", resumeFocusTimer);
     var resetBtn = el("button", { class:"btn btn-outline", text:"Reset" });
     resetBtn.addEventListener("click", resetFocusTimer);
     c.appendChild(resumeBtn); c.appendChild(resetBtn);
+    if (focusState.mode==="break") {
+      var skipBtn2 = el("button", { class:"btn btn-outline", text:"Skip Break" });
+      skipBtn2.addEventListener("click", skipBreakNow);
+      c.appendChild(skipBtn2);
+    }
   }
 }
 
@@ -825,41 +904,30 @@ function renderFocusScreen(content) {
   var topbar = el("div", { class:"topbar", style:"padding-left:0;padding-right:0;display:flex;align-items:center;justify-content:space-between;" }, [
     el("div",{class:"h-headline",text:"Focus"})
   ]);
+  var topbarBtns = el("div", { style:"display:flex;gap:8px;" });
+  var clockBtn = el("button", { class:"focus-icon-btn", title:"Fullscreen clock", text:"\uD83D\uDD53" });
+  clockBtn.addEventListener("click", openFullscreenClock);
   var gearBtn = el("button", { class:"focus-icon-btn", title:"Timer settings", text:"\u2699\uFE0F" });
   gearBtn.addEventListener("click", openFocusSettingsModal);
-  topbar.appendChild(gearBtn);
+  topbarBtns.appendChild(clockBtn);
+  topbarBtns.appendChild(gearBtn);
+  topbar.appendChild(topbarBtns);
   content.appendChild(topbar);
 
   var wrap = el("div", { class:"focus-wrap" });
 
   if (focusState.status==="completed") {
-    var justFinishedBreak = focusState.mode==="break";
-    var setJustFinished = justFinishedBreak && focusState.cycle >= focusState.totalCycles;
+    // Focus and break segments now flow into each other automatically, so
+    // this screen only ever shows up once the whole set of cycles is done.
     var card = el("div", { class:"focus-complete-card" });
-    if (setJustFinished) {
-      card.appendChild(el("div", { style:"font-size:44px;", text:"\uD83C\uDF89" }));
-      card.appendChild(el("div", { class:"h-title", style:"margin-top:8px;", text:"Pomodoro Set Complete!" }));
-      card.appendChild(el("div", { class:"h-body", style:"margin-top:4px;", text:"You finished all "+focusState.totalCycles+" cycles. Nicely done."}));
-      var row0 = el("div", { class:"focus-controls", style:"margin-top:20px;justify-content:center;" });
-      var newSetBtn = el("button", { class:"btn btn-primary", text:"Start New Set" });
-      newSetBtn.addEventListener("click", focusStartNewSet);
-      row0.appendChild(newSetBtn);
-      card.appendChild(row0);
-    } else {
-      card.appendChild(el("div", { style:"font-size:44px;", text: justFinishedBreak ? "\u2600\uFE0F" : "\uD83C\uDF45" }));
-      card.appendChild(el("div", { class:"h-title", style:"margin-top:8px;", text: justFinishedBreak ? "Break Complete!" : "Focus Complete!" }));
-      card.appendChild(el("div", { class:"h-body", style:"margin-top:4px;", text: justFinishedBreak ? "Ready for another round?" : Math.round(focusState.durationSec/60)+" minutes focused." }));
-      var row = el("div", { class:"focus-controls", style:"margin-top:20px;justify-content:center;" });
-      var primaryBtn = el("button", { class:"btn btn-primary", text: justFinishedBreak ? "Start Focus" : "Start Break" });
-      primaryBtn.addEventListener("click", focusContinueAfterCompletion);
-      row.appendChild(primaryBtn);
-      if (!justFinishedBreak) {
-        var skipBtn = el("button", { class:"btn btn-outline", text:"Skip Break" });
-        skipBtn.addEventListener("click", focusSkipToNext);
-        row.appendChild(skipBtn);
-      }
-      card.appendChild(row);
-    }
+    card.appendChild(el("div", { style:"font-size:44px;", text:"\uD83C\uDF89" }));
+    card.appendChild(el("div", { class:"h-title", style:"margin-top:8px;", text:"Pomodoro Set Complete!" }));
+    card.appendChild(el("div", { class:"h-body", style:"margin-top:4px;", text:"You finished all "+focusState.totalCycles+" cycles. Nicely done."}));
+    var row0 = el("div", { class:"focus-controls", style:"margin-top:20px;justify-content:center;" });
+    var newSetBtn = el("button", { class:"btn btn-primary", text:"Start New Set" });
+    newSetBtn.addEventListener("click", focusStartNewSet);
+    row0.appendChild(newSetBtn);
+    card.appendChild(row0);
     wrap.appendChild(card);
     content.appendChild(wrap);
     focusEls = null;
@@ -911,6 +979,209 @@ function renderFocusScreen(content) {
   };
   renderFocusControls();
   updateFocusVisual();
+}
+
+// ---------- Fullscreen Clock (live time + stopwatch, custom background) ----------
+var fsClockState = {
+  tab: "clock",   // clock | stopwatch
+  sw: { status: "idle", accumulated: 0, segmentStart: null, laps: [] }
+};
+var fsClockInterval = null;
+var fsClockMounted = false;
+
+function fsClockBgSetting() {
+  return DATA.settings.fsClockBg || { type: "default", value: "" };
+}
+function applyFsClockBackground() {
+  var overlay = document.getElementById("fsclock-overlay");
+  if (!overlay) return;
+  var bg = fsClockBgSetting();
+  overlay.classList.remove("fsclock-default-bg");
+  overlay.style.backgroundColor = "";
+  overlay.style.backgroundImage = "";
+  if (bg.type === "color" && bg.value) overlay.style.backgroundColor = bg.value;
+  else if (bg.type === "image" && bg.value) overlay.style.backgroundImage = "url('" + bg.value + "')";
+  else overlay.classList.add("fsclock-default-bg");
+}
+function fsClockFormatTime(d) {
+  var pad2 = function(n){ return (n<10?"0":"")+n; };
+  return pad2(d.getHours())+":"+pad2(d.getMinutes())+":"+pad2(d.getSeconds());
+}
+function fsClockFormatDate(d) {
+  var days=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  var months=["January","February","March","April","May","June","July","August","September","October","November","December"];
+  return days[d.getDay()]+", "+months[d.getMonth()]+" "+d.getDate();
+}
+function swElapsed() {
+  var s = fsClockState.sw;
+  return s.accumulated + (s.segmentStart ? (Date.now()-s.segmentStart) : 0);
+}
+function formatStopwatch(ms) {
+  ms = Math.max(0, Math.round(ms));
+  var cs = Math.floor((ms%1000)/10);
+  var totalSec = Math.floor(ms/1000);
+  var h = Math.floor(totalSec/3600), m = Math.floor((totalSec%3600)/60), s = totalSec%60;
+  var pad2 = function(n){ return (n<10?"0":"")+n; };
+  return (h>0 ? pad2(h)+":" : "") + pad2(m)+":"+pad2(s)+"."+pad2(cs);
+}
+function swStart() { fsClockState.sw.status="running"; fsClockState.sw.segmentStart=Date.now(); renderFsClockControls(); }
+function swPause() { fsClockState.sw.accumulated=swElapsed(); fsClockState.sw.segmentStart=null; fsClockState.sw.status="paused"; renderFsClockControls(); }
+function swReset() { fsClockState.sw = { status:"idle", accumulated:0, segmentStart:null, laps:[] }; renderFsClockControls(); renderFsClockLaps(); }
+function swLap() { fsClockState.sw.laps.unshift(swElapsed()); renderFsClockLaps(); }
+
+function fsClockTick() {
+  if (!fsClockMounted) return;
+  if (fsClockState.tab === "clock") {
+    var t = document.getElementById("fsclock-time"), d = document.getElementById("fsclock-date");
+    if (t) t.textContent = fsClockFormatTime(new Date());
+    if (d) d.textContent = fsClockFormatDate(new Date());
+  } else if (fsClockState.sw.status === "running") {
+    var swT = document.getElementById("fsclock-sw-time");
+    if (swT) swT.textContent = formatStopwatch(swElapsed());
+  }
+}
+
+function renderFsClockControls() {
+  var c = document.getElementById("fsclock-sw-controls");
+  if (!c) return;
+  c.innerHTML = "";
+  var sw = fsClockState.sw;
+  if (sw.status === "idle") {
+    var startBtn = el("button", { class:"fsclock-btn primary", text:"Start" });
+    startBtn.addEventListener("click", swStart);
+    c.appendChild(startBtn);
+  } else if (sw.status === "running") {
+    var lapBtn = el("button", { class:"fsclock-btn", text:"Lap" });
+    lapBtn.addEventListener("click", swLap);
+    var pauseBtn = el("button", { class:"fsclock-btn primary", text:"Pause" });
+    pauseBtn.addEventListener("click", swPause);
+    c.appendChild(lapBtn); c.appendChild(pauseBtn);
+  } else {
+    var resetBtn = el("button", { class:"fsclock-btn", text:"Reset" });
+    resetBtn.addEventListener("click", swReset);
+    var resumeBtn = el("button", { class:"fsclock-btn primary", text:"Resume" });
+    resumeBtn.addEventListener("click", swStart);
+    c.appendChild(resetBtn); c.appendChild(resumeBtn);
+  }
+  var timeEl = document.getElementById("fsclock-sw-time");
+  if (timeEl) timeEl.textContent = formatStopwatch(swElapsed());
+}
+function renderFsClockLaps() {
+  var wrap = document.getElementById("fsclock-laps");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  var laps = fsClockState.sw.laps;
+  laps.forEach(function(ms, i) {
+    wrap.appendChild(el("div", { class:"fsclock-lap-row" }, [
+      el("span", { text:"Lap "+(laps.length-i) }),
+      el("span", { text: formatStopwatch(ms) })
+    ]));
+  });
+}
+function renderFsClockBody() {
+  var body = document.getElementById("fsclock-body");
+  if (!body) return;
+  body.innerHTML = "";
+  if (fsClockState.tab === "clock") {
+    body.appendChild(el("div", { id:"fsclock-time", class:"fsclock-time", text: fsClockFormatTime(new Date()) }));
+    body.appendChild(el("div", { id:"fsclock-date", class:"fsclock-date", text: fsClockFormatDate(new Date()) }));
+  } else {
+    body.appendChild(el("div", { id:"fsclock-sw-time", class:"fsclock-sw-time", text: formatStopwatch(swElapsed()) }));
+    body.appendChild(el("div", { class:"fsclock-sw-controls", id:"fsclock-sw-controls" }));
+    body.appendChild(el("div", { class:"fsclock-lap-list", id:"fsclock-laps" }));
+    renderFsClockControls();
+    renderFsClockLaps();
+  }
+}
+function fsClockKeyHandler(e) { if (e.key === "Escape") closeFullscreenClock(); }
+
+function openFullscreenClock() {
+  closeFullscreenClock();
+  var overlay = el("div", { id:"fsclock-overlay", class:"fsclock-overlay" });
+
+  var topbar = el("div", { class:"fsclock-topbar" });
+  var bgBtn = el("button", { class:"fsclock-icon-btn", title:"Background", text:"\uD83C\uDFA8" });
+  bgBtn.addEventListener("click", openFsClockBackgroundModal);
+  var closeBtn = el("button", { class:"fsclock-icon-btn", title:"Close", text:"\u2715" });
+  closeBtn.addEventListener("click", closeFullscreenClock);
+  topbar.appendChild(bgBtn); topbar.appendChild(closeBtn);
+  overlay.appendChild(topbar);
+
+  var tabsRow = el("div", { class:"fsclock-tabs toggle-group" });
+  var clockTabBtn = el("button", { class:"toggle-opt active", text:"Clock" });
+  var swTabBtn = el("button", { class:"toggle-opt", text:"Stopwatch" });
+  clockTabBtn.addEventListener("click", function(){ fsClockState.tab="clock"; clockTabBtn.classList.add("active"); swTabBtn.classList.remove("active"); renderFsClockBody(); });
+  swTabBtn.addEventListener("click", function(){ fsClockState.tab="stopwatch"; swTabBtn.classList.add("active"); clockTabBtn.classList.remove("active"); renderFsClockBody(); });
+  tabsRow.appendChild(clockTabBtn); tabsRow.appendChild(swTabBtn);
+  overlay.appendChild(tabsRow);
+
+  overlay.appendChild(el("div", { class:"fsclock-body", id:"fsclock-body" }));
+
+  document.body.appendChild(overlay);
+  document.body.style.overflow = "hidden";
+  document.addEventListener("keydown", fsClockKeyHandler);
+  fsClockMounted = true;
+  applyFsClockBackground();
+  renderFsClockBody();
+  fsClockInterval = setInterval(fsClockTick, 200);
+}
+function closeFullscreenClock() {
+  var overlay = document.getElementById("fsclock-overlay");
+  if (overlay) overlay.remove();
+  if (fsClockInterval) { clearInterval(fsClockInterval); fsClockInterval = null; }
+  document.removeEventListener("keydown", fsClockKeyHandler);
+  document.body.style.overflow = "";
+  fsClockMounted = false;
+}
+
+function openFsClockBackgroundModal() {
+  var wrap = el("div", {});
+  wrap.appendChild(el("div", { class:"h-title", text:"Clock Background" }));
+  wrap.appendChild(el("div", { class:"h-body", style:"margin:6px 0 14px 0;", text:"Pick a color, upload an image, or use the default." }));
+
+  var swatchRow = el("div", { class:"icon-grid" });
+  BG_PRESETS.concat(["#000000","#1a1a2e","#0d1b2a"]).forEach(function(c){
+    var b = el("button", { class:"color-opt", style:"background:"+c+";border:1px solid var(--outline);", title:c });
+    b.addEventListener("click", function(){
+      DATA.settings.fsClockBg = { type:"color", value:c };
+      save(); applyFsClockBackground(); closeModal();
+    });
+    swatchRow.appendChild(b);
+  });
+  wrap.appendChild(swatchRow);
+
+  wrap.appendChild(el("label", { class:"field-label", text:"Custom color" }));
+  var curColor = fsClockBgSetting().type==="color" ? fsClockBgSetting().value : "#12140F";
+  var colorInput = el("input", { type:"color", value: curColor, style:"height:44px;padding:4px;cursor:pointer;" });
+  colorInput.addEventListener("change", function(){
+    DATA.settings.fsClockBg = { type:"color", value: colorInput.value };
+    save(); applyFsClockBackground(); closeModal();
+  });
+  wrap.appendChild(colorInput);
+
+  wrap.appendChild(el("label", { class:"field-label", style:"margin-top:14px;", text:"Background image" }));
+  var imgBtn = el("label", { class:"btn btn-outline btn-full", text:"Upload image" });
+  var fileInput = el("input", { type:"file", accept:"image/*", style:"display:none;" });
+  fileInput.addEventListener("change", function(){
+    var file = fileInput.files[0];
+    if (!file) return;
+    compressImage(file, function(dataUrl){
+      DATA.settings.fsClockBg = { type:"image", value: dataUrl };
+      save(); applyFsClockBackground(); closeModal();
+      showSnackbar("Background updated");
+    }, 1600, 0.7);
+  });
+  imgBtn.appendChild(fileInput);
+  wrap.appendChild(imgBtn);
+
+  var resetBtn = el("button", { class:"btn-text", style:"display:block;margin-top:14px;", text:"Reset to default" });
+  resetBtn.addEventListener("click", function(){
+    DATA.settings.fsClockBg = { type:"default", value:"" };
+    save(); applyFsClockBackground(); closeModal();
+  });
+  wrap.appendChild(resetBtn);
+
+  openModal(wrap, true);
 }
 
 // ---------- Rendering ----------

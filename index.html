@@ -730,7 +730,11 @@ function el(tag, attrs, children) {
   (children||[]).forEach(function(c){ if (c) e.appendChild(c); });
   return e;
 }
-function closeModal() { var m=document.getElementById("modal-root"); if (m) m.remove(); }
+function closeModal() {
+  var m=document.getElementById("modal-root");
+  if (m) m.remove();
+  if (fsClockReenterFsAfterModal) { enterFullscreen(); fsClockReenterFsAfterModal = false; }
+}
 function openModal(sheetEl, centered) {
   closeModal();
   var overlay = el("div", { id:"modal-root", class:"modal-overlay"+(centered?" centered":"") });
@@ -1556,13 +1560,28 @@ function renderFsClockBody() {
 }
 function fsClockKeyHandler(e) { if (e.key === "Escape") closeFullscreenClock(); }
 
+var fsClockEnteredFullscreen = false;
+var fsClockReenterFsAfterModal = false; // whether to restore true fullscreen once the appearance sheet closes
 function openFullscreenClock() {
   closeFullscreenClock();
+  // Go into real browser fullscreen too (hides the address bar etc.), but
+  // only exit it again on close if we're the one who entered it - if the
+  // whole app was already fullscreen, leave that alone.
+  if (!isFullscreen()) { enterFullscreen(); fsClockEnteredFullscreen = true; }
   var overlay = el("div", { id:"fsclock-overlay", class:"fsclock-overlay" });
 
   var topbar = el("div", { class:"fsclock-topbar" });
   var bgBtn = el("button", { class:"fsclock-icon-btn", title:"Appearance", text:"\uD83C\uDFA8" });
-  bgBtn.addEventListener("click", openFsClockBackgroundModal);
+  bgBtn.addEventListener("click", function(){
+    // Real fullscreen + a fixed-position modal (and especially a native file
+    // picker for the wallpaper upload) is a known bad combo on mobile
+    // browsers - the sheet can render but stop responding to taps. Safest
+    // fix: step out of true fullscreen while the sheet is open, and step
+    // back in once it's closed (the Done tap is itself a fresh gesture).
+    fsClockReenterFsAfterModal = isFullscreen();
+    if (fsClockReenterFsAfterModal) exitFullscreen();
+    openFsClockBackgroundModal();
+  });
   var closeBtn = el("button", { class:"fsclock-icon-btn", title:"Close", text:"\u2715" });
   closeBtn.addEventListener("click", closeFullscreenClock);
   topbar.appendChild(bgBtn); topbar.appendChild(closeBtn);
@@ -1588,6 +1607,7 @@ function openFullscreenClock() {
   fsClockInterval = setInterval(fsClockTick, 200);
 }
 function closeFullscreenClock() {
+  fsClockReenterFsAfterModal = false; // closing the clock entirely - don't let a pending appearance-sheet restore fight with the exit below
   closeModal(); // dismiss the appearance sheet too, so it can never linger onto the screen behind
   var overlay = document.getElementById("fsclock-overlay");
   if (overlay) overlay.remove();
@@ -1595,6 +1615,7 @@ function closeFullscreenClock() {
   document.removeEventListener("keydown", fsClockKeyHandler);
   document.body.style.overflow = "";
   fsClockMounted = false;
+  if (fsClockEnteredFullscreen) { exitFullscreen(); fsClockEnteredFullscreen = false; }
 }
 
 function openFsClockBackgroundModal() {

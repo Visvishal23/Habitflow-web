@@ -7,6 +7,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>HabitFlow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;700&family=Oswald:wght@300;400;700&display=swap" rel="stylesheet">
 <style>
 :root {
   --primary: #3D6E5C;
@@ -100,9 +103,9 @@ label.field-label { font-size: 13px; font-weight: 600; color: var(--text-seconda
 [data-device="desktop"] .navitem .icon { font-size: 18px; }
 [data-device="desktop"] .navitem.active { background: var(--primary-container); color: var(--on-primary-container); }
 [data-device="desktop"] .fab { bottom: 32px; right: 32px; }
-[data-device="desktop"] .habit-grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
 [data-device="desktop"] .modal-overlay { align-items: center; padding: 24px; }
 [data-device="desktop"] .modal-sheet { max-width: 540px; border-radius: 20px; max-height: 85vh; }
+[data-device="desktop"] .habit-grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
 [data-device="desktop"] .back-row { padding-top: 0; }
 .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .icon-btn { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text); width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
@@ -147,7 +150,7 @@ label.field-label { font-size: 13px; font-weight: 600; color: var(--text-seconda
 .sync-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
 .sync-dot.online { background: #2E7D32; }
 .sync-dot.offline { background: #C1440E; }
-.heatmap-wrap { overflow-x: auto; scrollbar-width: none; margin-top: 10px; position: relative; border-radius: 8px; }
+.heatmap-wrap { overflow-x: auto; scrollbar-width: none; margin-top: 10px; position: relative; z-index: 0; border-radius: 8px; }
 .heatmap-wrap::-webkit-scrollbar { display: none; }
 .heatmap-wallpaper { position: absolute; inset: 0; z-index: -1; background-size: cover; background-position: center; background-repeat: no-repeat; border-radius: 8px; pointer-events: none; }
 .heatmap-grid { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 1fr); gap: 4px; width: max-content; padding: 2px 2px 6px 0; }
@@ -190,15 +193,15 @@ label.field-label { font-size: 13px; font-weight: 600; color: var(--text-seconda
 .focus-meta { margin-top: 20px; text-align: center; }
 .focus-stats-card { margin-top: 18px; width: 100%; max-width: 300px; background: var(--surface); border: 1px solid var(--outline); border-radius: 16px; padding: 16px 18px; text-align: center; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
-.back-row { display: flex; align-items: center; padding: 16px 0 0 0; margin-bottom: -4px; }
-.back-btn { width: 36px; height: 36px; border-radius: 50%; border: none; background: none; color: var(--text); font-size: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-.back-btn:active { background: var(--surface-variant); }
 .habit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .habit-grid-card { background: var(--surface); border: 1px solid var(--outline); border-radius: var(--radius-md); padding: 12px; cursor: pointer; }
 .habit-grid-card .hg-top { display: flex; align-items: center; justify-content: space-between; }
 .habit-grid-card .hg-icon { font-size: 20px; }
 .habit-grid-card .hg-name { font-size: 13px; font-weight: 700; margin-top: 6px; line-height: 1.25; }
 .habit-grid-card .hg-sub { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+.back-row { display: flex; align-items: center; padding: 16px 0 0 0; margin-bottom: -4px; }
+.back-btn { width: 36px; height: 36px; border-radius: 50%; border: none; background: none; color: var(--text); font-size: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.back-btn:active { background: var(--surface-variant); }
 .goal-caption { font-size: 11px; margin-top: 8px; text-decoration: underline; cursor: pointer; color: var(--text-secondary); background: none; border: none; padding: 0; font-family: inherit; }
 
 /* ---- Fullscreen Clock ---- */
@@ -212,9 +215,9 @@ label.field-label { font-size: 13px; font-weight: 600; color: var(--text-seconda
 .fsclock-tabs .toggle-opt { color: rgba(255,255,255,0.75); }
 .fsclock-tabs .toggle-opt.active { background: #fff; color: #111; }
 .fsclock-body { flex: 1; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; z-index: 1; }
-.fsclock-time { font-size: clamp(48px, 16vw, 108px); font-weight: 200; font-variant-numeric: tabular-nums; letter-spacing: 1px; text-shadow: 0 2px 18px rgba(0,0,0,0.35); font-family: var(--fsclock-font, inherit); color: var(--fsclock-color, #fff); }
+.fsclock-time { font-size: clamp(48px, 16vw, 108px); font-weight: var(--fsclock-weight, 300); font-variant-numeric: tabular-nums; letter-spacing: 1px; text-shadow: 0 2px 18px rgba(0,0,0,0.35); font-family: var(--fsclock-font, inherit); color: var(--fsclock-color, #fff); }
 .fsclock-date { font-size: clamp(14px, 3.4vw, 19px); opacity: .85; margin-top: 6px; font-weight: 500; font-family: var(--fsclock-font, inherit); color: var(--fsclock-color, #fff); }
-.fsclock-sw-time { font-size: clamp(40px, 13vw, 84px); font-weight: 300; font-variant-numeric: tabular-nums; text-shadow: 0 2px 18px rgba(0,0,0,0.35); font-family: var(--fsclock-font, inherit); color: var(--fsclock-color, #fff); }
+.fsclock-sw-time { font-size: clamp(40px, 13vw, 84px); font-weight: var(--fsclock-weight, 300); font-variant-numeric: tabular-nums; text-shadow: 0 2px 18px rgba(0,0,0,0.35); font-family: var(--fsclock-font, inherit); color: var(--fsclock-color, #fff); }
 .fsclock-sw-controls { display: flex; gap: 14px; margin-top: 26px; }
 .fsclock-btn { background: rgba(255,255,255,0.16); color: #fff; border: 1.5px solid rgba(255,255,255,0.55); border-radius: 50px; padding: 12px 24px; font-size: 15px; font-weight: 600; cursor: pointer; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
 .fsclock-btn:active { opacity: .75; }
@@ -299,7 +302,7 @@ var defaultData = {
   settings: {
     theme: "system", homeView: "list", onboardingDone: false, nickname: "", bgColor: "", focusSound: true,
     fsClockBg: { type: "default", value: "", opacity: 1 },
-    fsClockStyle: { fontFamily: "system", color: "#ffffff" },
+    fsClockStyle: { fontFamily: "poppins", color: "#ffffff", bold: false },
     appWallpaper: { value: "", opacity: 0.3 },
     dailyFocusGoalMin: 120,
     autoFullscreen: false,
@@ -426,7 +429,7 @@ function subscribeToUser(uid) {
       for (var sk in defaultData.settings) { if (!(sk in DATA.settings)) DATA.settings[sk] = defaultData.settings[sk]; }
       if (!DATA.settings.fsClockBg) DATA.settings.fsClockBg = defaultData.settings.fsClockBg;
       if (typeof DATA.settings.fsClockBg.opacity !== "number") DATA.settings.fsClockBg.opacity = 1;
-      if (!DATA.settings.fsClockStyle) DATA.settings.fsClockStyle = { fontFamily:"system", color:"#ffffff" };
+      if (!DATA.settings.fsClockStyle) DATA.settings.fsClockStyle = { fontFamily:"poppins", color:"#ffffff", bold:false };
       if (!DATA.settings.appWallpaper) DATA.settings.appWallpaper = { value:"", opacity:0.3 };
     } else {
       DATA = JSON.parse(JSON.stringify(defaultData));
@@ -852,24 +855,6 @@ function openAccentColorModal() {
   });
   wrap.appendChild(resetBtn);
 
-  openModal(wrap, true);
-}
-
-function openHomeLayoutModal() {
-  var wrap = el("div", {});
-  wrap.appendChild(el("div", { class:"h-title", text:"Home Layout" }));
-  wrap.appendChild(el("div", { class:"h-body", style:"margin:6px 0 14px 0;", text:"Choose how your habits are shown on Home." }));
-  [["list","List","Full-width rows with a history strip"],["streak","Streak","Full-width rows focused on streak stats"],["grid","Grid","Compact two-column cards"]].forEach(function(opt){
-    var row = el("div", { class:"radio-row" });
-    var dot = el("div", { class:"radio-dot"+(DATA.settings.homeView===opt[0]?" active":"") });
-    row.appendChild(dot);
-    row.appendChild(el("div", {}, [ el("div",{text:opt[1]}), el("div",{class:"h-body",style:"font-size:12px;",text:opt[2]}) ]));
-    row.addEventListener("click", function(){
-      DATA.settings.homeView = opt[0];
-      save(); closeModal(); render();
-    });
-    wrap.appendChild(row);
-  });
   openModal(wrap, true);
 }
 
@@ -1441,14 +1426,11 @@ function fsClockBgSetting() {
   return DATA.settings.fsClockBg || { type: "default", value: "", opacity: 1 };
 }
 function fsClockStyleSetting() {
-  return DATA.settings.fsClockStyle || { fontFamily: "system", color: "#ffffff" };
+  return DATA.settings.fsClockStyle || { fontFamily: "poppins", color: "#ffffff", bold: false };
 }
 var FS_CLOCK_FONTS = [
-  ["system", "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", "Default"],
-  ["serif", "Georgia, 'Times New Roman', serif", "Serif"],
-  ["mono", "'SF Mono', 'Courier New', monospace", "Monospace"],
-  ["rounded", "'Century Gothic', 'Trebuchet MS', sans-serif", "Rounded"],
-  ["condensed", "'Arial Narrow', Arial, sans-serif", "Condensed"]
+  ["poppins", "'Poppins', -apple-system, BlinkMacSystemFont, sans-serif", "Poppins"],
+  ["oswald", "'Oswald', 'Arial Narrow', sans-serif", "Oswald"]
 ];
 function fsClockFontStack(key) {
   var found = FS_CLOCK_FONTS.find(function(f){ return f[0]===key; });
@@ -1480,6 +1462,7 @@ function applyFsClockStyle() {
   var st = fsClockStyleSetting();
   overlay.style.setProperty("--fsclock-font", fsClockFontStack(st.fontFamily));
   overlay.style.setProperty("--fsclock-color", st.color || "#ffffff");
+  overlay.style.setProperty("--fsclock-weight", st.bold ? "700" : "300");
 }
 function fsClockFormatTime(d) {
   var pad2 = function(n){ return (n<10?"0":"")+n; };
@@ -1610,6 +1593,7 @@ function openFullscreenClock() {
   fsClockInterval = setInterval(fsClockTick, 200);
 }
 function closeFullscreenClock() {
+  closeModal(); // dismiss the appearance sheet too, so it can never linger onto the screen behind
   var overlay = document.getElementById("fsclock-overlay");
   if (overlay) overlay.remove();
   if (fsClockInterval) { clearInterval(fsClockInterval); fsClockInterval = null; }
@@ -1686,7 +1670,7 @@ function openFsClockBackgroundModal() {
   FS_CLOCK_FONTS.forEach(function(f){
     var b = el("button", { class:"font-opt"+(st.fontFamily===f[0]?" active":""), style:"font-family:"+f[1]+";", text: f[2]+"  12:34:56" });
     b.addEventListener("click", function(){
-      DATA.settings.fsClockStyle = { fontFamily: f[0], color: st.color };
+      DATA.settings.fsClockStyle = { fontFamily: f[0], color: st.color, bold: st.bold };
       st.fontFamily = f[0];
       save(); applyFsClockStyle();
       wrap.querySelectorAll(".font-opt").forEach(function(x){x.classList.remove("active");});
@@ -1695,12 +1679,29 @@ function openFsClockBackgroundModal() {
     wrap.appendChild(b);
   });
 
+  wrap.appendChild(el("label", { class:"field-label", style:"margin-top:10px;", text:"Weight" }));
+  var boldGroup = el("div", { class:"toggle-group" });
+  var boldOffBtn = el("button", { class:"toggle-opt"+(!st.bold?" active":""), text:"Regular" });
+  var boldOnBtn = el("button", { class:"toggle-opt"+(st.bold?" active":""), text:"Bold" });
+  boldOffBtn.addEventListener("click", function(){
+    DATA.settings.fsClockStyle = { fontFamily: st.fontFamily, color: st.color, bold: false };
+    st.bold = false; save(); applyFsClockStyle();
+    boldOffBtn.classList.add("active"); boldOnBtn.classList.remove("active");
+  });
+  boldOnBtn.addEventListener("click", function(){
+    DATA.settings.fsClockStyle = { fontFamily: st.fontFamily, color: st.color, bold: true };
+    st.bold = true; save(); applyFsClockStyle();
+    boldOnBtn.classList.add("active"); boldOffBtn.classList.remove("active");
+  });
+  boldGroup.appendChild(boldOffBtn); boldGroup.appendChild(boldOnBtn);
+  wrap.appendChild(boldGroup);
+
   wrap.appendChild(el("label", { class:"field-label", style:"margin-top:10px;", text:"Number color" }));
   var colorSwatchRow = el("div", { class:"icon-grid" });
   ["#ffffff","#000000","#FFD54F","#80DEEA","#FF8A65","#A5D6A7","#CE93D8"].forEach(function(c){
     var b = el("button", { class:"color-opt", style:"background:"+c+";border:1px solid var(--outline);", title:c, text: st.color===c?"\u2713":"" });
     b.addEventListener("click", function(){
-      DATA.settings.fsClockStyle = { fontFamily: st.fontFamily, color: c };
+      DATA.settings.fsClockStyle = { fontFamily: st.fontFamily, color: c, bold: st.bold };
       st.color = c;
       save(); applyFsClockStyle();
       colorSwatchRow.querySelectorAll(".color-opt").forEach(function(x){x.textContent="";});
@@ -1711,7 +1712,7 @@ function openFsClockBackgroundModal() {
   wrap.appendChild(colorSwatchRow);
   var numColorInput = el("input", { type:"color", value: st.color || "#ffffff", style:"height:44px;padding:4px;margin-top:8px;cursor:pointer;" });
   numColorInput.addEventListener("change", function(){
-    DATA.settings.fsClockStyle = { fontFamily: st.fontFamily, color: numColorInput.value };
+    DATA.settings.fsClockStyle = { fontFamily: st.fontFamily, color: numColorInput.value, bold: st.bold };
     st.color = numColorInput.value;
     save(); applyFsClockStyle();
   });
@@ -1819,19 +1820,13 @@ function renderHome(content) {
       el("div", { class:"h-body", text: formatHeaderDate(today) })
     ])
   ]);
-  var topIconGroup = el("div", { style:"display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;" });
+  var topIconGroup = el("div", { style:"display:flex;gap:8px;flex-shrink:0;" });
   var focusIconBtn = el("button", { class:"focus-icon-btn", title:"Focus timer", text:"\uD83C\uDF45" });
   focusIconBtn.addEventListener("click", function(){ goToTab("focus"); });
   var journalIconBtn = el("button", { class:"focus-icon-btn", title:"Journal", text:"\uD83D\uDCD6" });
   journalIconBtn.addEventListener("click", function(){ goToTab("journal"); });
-  var colorIconBtn = el("button", { class:"focus-icon-btn", title:"Theme color", text:"\uD83C\uDFA8" });
-  colorIconBtn.addEventListener("click", openAccentColorModal);
-  var layoutIconBtn = el("button", { class:"focus-icon-btn", title:"Home layout", text:"\u25A6" });
-  layoutIconBtn.addEventListener("click", openHomeLayoutModal);
   topIconGroup.appendChild(focusIconBtn);
   topIconGroup.appendChild(journalIconBtn);
-  topIconGroup.appendChild(colorIconBtn);
-  topIconGroup.appendChild(layoutIconBtn);
   top.appendChild(topIconGroup);
   content.appendChild(top);
 
@@ -1841,6 +1836,16 @@ function renderHome(content) {
     el("div", { style:"margin-top:8px;font-size:14px;", text: doneToday+" of "+scheduledToday.length+" habits completed" })
   ]);
   content.appendChild(summary);
+
+  var toggleWrap = el("div", { style:"margin-top:14px;" });
+  var toggle = el("div", { class:"toggle-group" });
+  [["list","List"],["streak","Streak"],["grid","Grid"]].forEach(function(mode){
+    var b = el("button", { class:"toggle-opt"+(DATA.settings.homeView===mode[0]?" active":""), text: mode[1] });
+    b.addEventListener("click", function(){ DATA.settings.homeView=mode[0]; save(); render(); });
+    toggle.appendChild(b);
+  });
+  toggleWrap.appendChild(toggle);
+  content.appendChild(toggleWrap);
 
   if (habits.length===0) { content.appendChild(emptyState("\uD83C\uDF31","Start building your routine.","Create your first habit and begin tracking your progress.","+ Create Habit",function(){openHabitForm(null);})); return; }
 
@@ -1858,10 +1863,26 @@ function renderHome(content) {
   habits.forEach(function(habit) {
     var stats = computeStats(habit, today);
     var done = isComplete(habit.id, today);
-    content.appendChild(DATA.settings.homeView==="streak" ? habitStreakCard(habit,stats,done) : habitListCard(habit,stats,done));
+    content.appendChild(DATA.settings.homeView==="list" ? habitListCard(habit,stats,done) : habitStreakCard(habit,stats,done));
   });
 }
 
+function habitGridCard(habit, stats, done) {
+  var notStarted = todayISO() < habit.startDate;
+  var card = el("div", { class:"habit-grid-card" });
+  card.addEventListener("click", function(e){ if (e.target.closest(".check-btn")) return; openHabitDetail(habit.id); });
+  var top = el("div", { class:"hg-top" }, [
+    el("div", { class:"hg-icon", text: habit.icon })
+  ]);
+  var checkBtn = el("button", { class:"check-btn"+(done?" done":""), text: done?"\u2713":"" });
+  if (notStarted) checkBtn.setAttribute("disabled", "disabled");
+  checkBtn.addEventListener("click", function(e){ e.stopPropagation(); handleToggleToday(habit); });
+  top.appendChild(checkBtn);
+  card.appendChild(top);
+  card.appendChild(el("div", { class:"hg-name", text: habit.name }));
+  card.appendChild(el("div", { class:"hg-sub", text: notStarted ? ("\uD83D\uDD12 "+formatMedium(habit.startDate)) : ("\uD83D\uDD25 "+stats.currentStreak+" days") }));
+  return card;
+}
 function habitListCard(habit, stats, done) {
   var card = el("div", { class:"card" });
   var notStarted = todayISO() < habit.startDate;
@@ -1906,22 +1927,6 @@ function habitStreakCard(habit, stats, done) {
   });
   card.appendChild(metrics);
   card.appendChild(buildHeatmapGrid(habit));
-  return card;
-}
-function habitGridCard(habit, stats, done) {
-  var notStarted = todayISO() < habit.startDate;
-  var card = el("div", { class:"habit-grid-card" });
-  card.addEventListener("click", function(e){ if (e.target.closest(".check-btn")) return; openHabitDetail(habit.id); });
-  var top = el("div", { class:"hg-top" }, [
-    el("div", { class:"hg-icon", text: habit.icon })
-  ]);
-  var checkBtn = el("button", { class:"check-btn"+(done?" done":""), text: done?"\u2713":"" });
-  if (notStarted) checkBtn.setAttribute("disabled", "disabled");
-  checkBtn.addEventListener("click", function(e){ e.stopPropagation(); handleToggleToday(habit); });
-  top.appendChild(checkBtn);
-  card.appendChild(top);
-  card.appendChild(el("div", { class:"hg-name", text: habit.name }));
-  card.appendChild(el("div", { class:"hg-sub", text: notStarted ? ("\uD83D\uDD12 "+formatMedium(habit.startDate)) : ("\uD83D\uDD25 "+stats.currentStreak+" days") }));
   return card;
 }
 function emptyState(emoji, title, subtitle, actionLabel, onAction) {
@@ -2353,6 +2358,17 @@ function renderSettings(content) {
   ]);
   content.appendChild(wallCard);
   content.appendChild(el("div", { class:"h-body", style:"font-size:12px;margin:4px 0 0 0;", text:"Applies across the whole app, including the Focus tab." }));
+
+  var accentCurrent = DATA.settings.accentColor && DATA.settings.accentColor.primary;
+  var accentCard = el("div", { class:"card", style:"display:flex;align-items:center;justify-content:space-between;margin-top:10px;" }, [
+    el("div", { style:"display:flex;align-items:center;gap:10px;" }, [
+      el("div", { style:"width:22px;height:22px;border-radius:50%;flex-shrink:0;background:"+(accentCurrent||"#3D6E5C")+";" }),
+      el("div", {}, [ el("div",{class:"field-label",style:"margin-bottom:2px;",text:"Home Screen Theme Color"}), el("div",{style:"font-weight:600;",text: accentCurrent ? "Custom" : "Default (Green)"}) ])
+    ]),
+    (function(){ var b=el("button",{class:"btn-text",text:"Change"}); b.addEventListener("click", openAccentColorModal); return b; })()
+  ]);
+  content.appendChild(accentCard);
+  content.appendChild(el("div", { class:"h-body", style:"font-size:12px;margin:4px 0 0 0;", text:"Colors buttons, progress bars and icons throughout the app." }));
 
   content.appendChild(el("div", { class:"section-title", text:"Display" }));
   var fsCard = el("div", { class:"card" });

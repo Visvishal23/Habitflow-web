@@ -433,7 +433,10 @@ function subscribeToUser(uid) {
       if (!DATA.settings.appWallpaper) DATA.settings.appWallpaper = { value:"", opacity:0.3 };
     } else {
       DATA = JSON.parse(JSON.stringify(defaultData));
-      setDoc(userDocRef, DATA);
+      setDoc(userDocRef, DATA).catch(function(err) {
+        console.error("Could not create user document", err);
+        renderFatalError("Couldn't set up your account", err);
+      });
     }
     applyTheme();
     render();
@@ -442,8 +445,32 @@ function subscribeToUser(uid) {
     }
   }, function(err) {
     console.error("Sync error", err);
-    showSnackbar("Sync error - showing your last-known data.");
+    // This listener failing (as opposed to just a write failing above) means
+    // we never got the person's data at all - showing a snackbar over a
+    // frozen splash screen would leave them stuck with no way forward, so
+    // show a proper, actionable error screen instead.
+    renderFatalError("Couldn't load your account", err);
   });
+}
+// A visible, specific error screen for auth/Firestore failures that would
+// otherwise leave the person stuck on a spinner with no explanation -
+// especially important for permission errors, which are silent by default.
+function renderFatalError(title, err) {
+  var root = document.getElementById("content-root");
+  if (!root) return;
+  root.innerHTML = "";
+  var wrap = el("div", { class:"splash-screen", style:"padding:24px;text-align:center;gap:10px;" });
+  wrap.appendChild(el("div", { text:"\u26A0\uFE0F", style:"font-size:36px;" }));
+  wrap.appendChild(el("div", { class:"h-title", text: title }));
+  wrap.appendChild(el("div", { class:"h-body", style:"max-width:320px;", text: (err && (err.code || err.message)) ? String(err.code || err.message) : "Unknown error" }));
+  wrap.appendChild(el("div", { class:"h-body", style:"font-size:12px;max-width:320px;margin-top:4px;", text:"This usually means the Firestore security rules for this project don't allow this account to read/write its own data yet." }));
+  var retryBtn = el("button", { class:"btn btn-primary", style:"margin-top:14px;", text:"Try Again" });
+  retryBtn.addEventListener("click", function(){ if (currentUser) subscribeToUser(currentUser.uid); });
+  var signOutBtn = el("button", { class:"btn-text", style:"margin-top:10px;", text:"Sign out" });
+  signOutBtn.addEventListener("click", signOutUser);
+  wrap.appendChild(retryBtn);
+  wrap.appendChild(signOutBtn);
+  root.appendChild(wrap);
 }
 
 onAuthStateChanged(auth, function(user) {

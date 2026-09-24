@@ -1937,7 +1937,7 @@ function renderLoginScreen() {
 }
 
 function renderBottomNav() {
-  var items = [["home","\uD83C\uDFE0","Home"],["calendar","\uD83D\uDCC5","Calendar"],["focus","\uD83C\uDF45","Focus"],["water","\uD83D\uDCA7","Water"],["stats","\uD83D\uDCCA","Stats"],["settings","\u2699\uFE0F","Settings"]];
+  var items = [["home","\uD83C\uDFE0","Home"],["calendar","\uD83D\uDCC5","Calendar"],["focus","\uD83C\uDF45","Focus"],["stats","\uD83D\uDCCA","Stats"],["settings","\u2699\uFE0F","Settings"]];
   var nav = el("div", { class:"bottomnav" });
   if (deviceMode === "desktop") {
     nav.appendChild(el("div", { class:"sidenav-brand" }, [ el("span",{text:"\uD83D\uDD25"}), el("span",{text:"HabitFlow"}) ]));
@@ -2102,7 +2102,7 @@ function renderWater(content) {
   ringCard.appendChild(el("div", { class:"h-body", style:"margin-top:6px;font-size:13px;", text: paceTxt }));
 
   ringCard.appendChild(el("div", { class:"field-label", style:"align-self:flex-start;margin-top:16px;", text:"Quick add" }));
-  var quickWrap = el("div", { class:"chips" });
+  var quickWrap = el("div", { class:"chips", style:"width:100%;min-width:0;" });
   WATER_QUICK.forEach(function(a) {
     var label = a>=1000 ? (a/1000)+" L" : a+" ml";
     var b = el("button", { class:"chip", text:"+ "+label });

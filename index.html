@@ -233,12 +233,29 @@ label.field-label { font-size: 13px; font-weight: 600; color: var(--text-seconda
 .fsclock-lap-row { display: flex; justify-content: space-between; padding: 7px 10px; border-bottom: 1px solid rgba(255,255,255,0.18); font-size: 14px; font-variant-numeric: tabular-nums; }
 .font-opt { padding: 10px 14px; border-radius: 12px; border: 1.5px solid var(--outline); background: var(--surface); color: var(--text); font-size: 15px; cursor: pointer; text-align: left; margin-bottom: 8px; display: block; width: 100%; }
 .font-opt.active { border-color: var(--primary); background: var(--primary-container); color: var(--on-primary-container); }
-.hydro-ring { position: relative; width: 180px; height: 180px; margin: 0 auto; }
-.hydro-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-.hydro-ring-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.hydro-ring-center .amt { font-size: 22px; font-weight: 700; }
-.hydro-ring-center .goal { font-size: 12px; color: var(--text-secondary); }
-.hydro-ring-center .pct { font-size: 13px; font-weight: 700; color: var(--primary); margin-top: 2px; }
+.hydro-ringwrap { position: relative; width: 210px; height: 210px; margin: 0 auto; }
+.hg-ring-svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.hg-ring-fill { transition: stroke-dashoffset .8s cubic-bezier(.22,.9,.35,1.1); }
+.hydro-ring-inner { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+.hydro-glass-sm { position: relative; width: 116px; height: 139px; }
+.hydro-glass-sm svg { width: 100%; height: 100%; display: block; }
+.hydro-glass-label { text-align: center; }
+.hydro-glass-label .amt { font-size: 17px; font-weight: 700; }
+.hydro-glass-label .pct { font-size: 11px; color: var(--text-secondary); margin-top: 1px; }
+.hg-wave { animation: hgWave 3.2s linear infinite; }
+.hg-wave.hg-slow { animation-duration: 4.6s; }
+@keyframes hgWave { from { transform: translateX(0); } to { transform: translateX(-200px); } }
+.hg-pour-wrap { position: absolute; left: 50%; top: -46px; width: 40px; height: 46px; transform: translateX(-50%); opacity: 0; pointer-events: none; }
+.hg-pour-wrap.hg-pour-go { animation: hgPourWrap .8s ease-out; }
+@keyframes hgPourWrap { 0% { opacity: 0; } 10% { opacity: 1; } 82% { opacity: 1; } 100% { opacity: 0; } }
+.hg-pour-cup { position: absolute; left: 2px; top: 0; font-size: 20px; transform-origin: 70% 35%; }
+.hg-pour-wrap.hg-pour-go .hg-pour-cup { animation: hgCupTilt .8s ease-in-out; }
+@keyframes hgCupTilt { 0% { transform: rotate(0deg); } 25% { transform: rotate(-58deg); } 72% { transform: rotate(-58deg); } 100% { transform: rotate(0deg); } }
+.hg-stream { position: absolute; left: 50%; top: 15px; width: 4px; height: 0; background: var(--primary); border-radius: 2px; transform: translateX(-50%); transform-origin: top; opacity: 0; }
+.hg-pour-wrap.hg-pour-go .hg-stream { animation: hgStream .8s ease-in-out; }
+@keyframes hgStream { 0% { height: 0; opacity: 0; } 22% { opacity: 1; } 32% { height: 32px; } 72% { height: 32px; opacity: 1; } 100% { height: 6px; opacity: 0; } }
+.hg-rect.hg-bounce { animation: hgBounce .5s ease-out; transform-box: fill-box; transform-origin: bottom center; }
+@keyframes hgBounce { 0% { transform: scaleY(.55); } 45% { transform: scaleY(1.15); } 100% { transform: scaleY(1); } }
 </style>
 </head>
 <body>
@@ -1971,12 +1988,20 @@ var BEVS = [
   { id:"sports", name:"Sports", icon:"\uD83C\uDFCB\uFE0F", factor:.95 }
 ];
 var WATER_QUICK = [150,250,350,500,750,1000];
+var waterAnimFrom = 0;
+var waterPourPending = false;
+function glassGeom(pct) {
+  var topY=24, bottomY=222;
+  var y = bottomY - (bottomY-topY) * (Math.max(0,Math.min(100,pct))/100);
+  return { y: y, h: bottomY - y };
+}
 
 function bevInfo(id) { return BEVS.find(function(b){ return b.id===id; }) || BEVS[0]; }
 function waterDayKey(d) { d = d || new Date(); return d.toISOString().slice(0,10); }
 function hydratedAmount(list) { return list.reduce(function(s,d){ return s+Math.round(d.amount*bevInfo(d.bev).factor); }, 0); }
 function todayDrinksWater() { var k=waterDayKey(); return DATA.water.drinks.filter(function(x){ return x.ts.slice(0,10)===k; }); }
 function addDrink(amount) {
+  waterPourPending = true;
   DATA.water.drinks.push({ id: Date.now()+""+Math.random(), bev: DATA.water.selectedBev, amount: amount, ts: new Date().toISOString() });
   save(); render(); showSnackbar(bevInfo(DATA.water.selectedBev).icon+" "+amount+" ml added!");
 }
@@ -2083,14 +2108,63 @@ function renderWater(content) {
   ]));
 
   var ringCard = el("div", { class:"card", style:"display:flex;flex-direction:column;align-items:center;padding:22px 16px 18px 16px;" });
-  var ring = el("div", { class:"hydro-ring" });
-  ring.innerHTML = '<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="88" stroke="var(--surface-variant)" stroke-width="16" fill="none"/><circle cx="100" cy="100" r="88" stroke="var(--primary)" stroke-width="16" fill="none" stroke-linecap="round" stroke-dasharray="553" stroke-dashoffset="'+(553-553*pct/100)+'" style="transition:stroke-dashoffset .5s ease"/></svg>';
-  ring.appendChild(el("div", { class:"hydro-ring-center" }, [
+  var ringWrap = el("div", { class:"hydro-ringwrap" });
+  var circ = 578;
+  var pctFrom = waterAnimFrom;
+  ringWrap.innerHTML =
+    '<svg class="hg-ring-svg" viewBox="0 0 210 210">' +
+      '<circle cx="105" cy="105" r="92" stroke="var(--surface-variant)" stroke-width="14" fill="none"/>' +
+      '<circle class="hg-ring-fill" cx="105" cy="105" r="92" stroke="var(--primary)" stroke-width="14" fill="none" stroke-linecap="round" stroke-dasharray="'+circ+'" stroke-dashoffset="'+(circ-circ*pctFrom/100)+'"/>' +
+    '</svg>';
+  var ringInner = el("div", { class:"hydro-ring-inner" });
+  var glass = el("div", { class:"hydro-glass-sm" });
+  var geomFrom = glassGeom(waterAnimFrom);
+  glass.innerHTML =
+    '<svg viewBox="0 0 200 240">' +
+      '<defs><clipPath id="hgClip"><path d="M46 20 L154 20 L138 220 Q100 232 62 220 Z"/></clipPath></defs>' +
+      '<g clip-path="url(#hgClip)">' +
+        '<rect class="hg-rect" x="30" y="'+geomFrom.y+'" width="140" height="'+geomFrom.h+'" fill="var(--primary)"/>' +
+        '<g class="hg-wave-y1" style="transform:translate(0px,'+geomFrom.y+'px)"><path class="hg-wave" fill="var(--primary)" d="M0,0 C25,-8 45,8 70,0 C95,-8 115,8 140,0 C165,-8 185,8 210,0 C235,-8 255,8 280,0 L280,20 L0,20 Z"/></g>' +
+        '<g class="hg-wave-y2" style="transform:translate(0px,'+geomFrom.y+'px)"><path class="hg-wave hg-slow" fill="var(--primary)" style="opacity:.55" d="M0,2 C30,-10 50,12 80,2 C110,-10 130,12 160,2 C190,-10 210,12 240,2 L240,20 L0,20 Z"/></g>' +
+      '</g>' +
+      '<path d="M46 20 L154 20 L138 220 Q100 232 62 220 Z" fill="none" stroke="var(--outline)" stroke-width="3" stroke-linejoin="round"/>' +
+      '<path d="M46 20 L154 20" stroke="var(--text-secondary)" stroke-width="3" stroke-linecap="round"/>' +
+    '</svg>' +
+    '<div class="hg-pour-wrap"><div class="hg-pour-cup">\uD83E\uDED7</div><div class="hg-stream"></div></div>';
+  ringInner.appendChild(glass);
+  ringInner.appendChild(el("div", { class:"hydro-glass-label" }, [
     el("div", { class:"amt", text: hyd+" ml" }),
-    el("div", { class:"goal", text:"of "+w.goal+" ml" }),
-    el("div", { class:"pct", text: pct+"%" })
+    el("div", { class:"pct", text: pct+"% of "+w.goal+" ml" })
   ]));
-  ringCard.appendChild(ring);
+  ringWrap.appendChild(ringInner);
+  ringCard.appendChild(ringWrap);
+
+  (function() {
+    var rectEl = glass.querySelector(".hg-rect");
+    var wave1 = glass.querySelector(".hg-wave-y1");
+    var wave2 = glass.querySelector(".hg-wave-y2");
+    var pourWrap = glass.querySelector(".hg-pour-wrap");
+    var ringFill = ringWrap.querySelector(".hg-ring-fill");
+    var pour = waterPourPending;
+    waterPourPending = false;
+    var target = glassGeom(pct);
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        rectEl.style.transition = "y .8s cubic-bezier(.22,.9,.35,1.1), height .8s cubic-bezier(.22,.9,.35,1.1)";
+        rectEl.setAttribute("y", target.y);
+        rectEl.setAttribute("height", target.h);
+        wave1.style.transition = wave2.style.transition = "transform .8s cubic-bezier(.22,.9,.35,1.1)";
+        wave1.style.transform = wave2.style.transform = "translate(0px,"+target.y+"px)";
+        ringFill.setAttribute("stroke-dashoffset", String(circ - circ*pct/100));
+        if (pour) {
+          pourWrap.classList.remove("hg-pour-go"); void pourWrap.offsetWidth; pourWrap.classList.add("hg-pour-go");
+          rectEl.classList.add("hg-bounce");
+          setTimeout(function(){ rectEl.classList.remove("hg-bounce"); }, 500);
+        }
+      });
+    });
+    waterAnimFrom = pct;
+  })();
 
   var hr = new Date().getHours();
   var expectedPct = Math.min(100, Math.round(((hr-7)/15)*100));

@@ -1970,22 +1970,25 @@ function renderHome(content) {
   top.appendChild(topIconGroup);
   content.appendChild(top);
 
-  var summary = el("div", { class:"summary-card" }, [
-    (function(){ var row=el("div",{style:"display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"}); row.appendChild(el("div",{class:"h-title",text:"Today"})); row.appendChild(el("div",{class:"h-title",text:pct+"%"})); return row; })(),
-    el("div", { class:"progress-bar" }, [el("div",{class:"progress-fill",style:"width:"+pct+"%"})]),
-    el("div", { style:"margin-top:8px;font-size:14px;", text: doneToday+" of "+scheduledToday.length+" habits completed" })
+  var summary = el("div", { class:"summary-card", style:"padding:14px;" }, [
+    (function(){ var row=el("div",{style:"display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;"}); row.appendChild(el("div",{style:"font-size:14px;font-weight:600;",text:"Today"})); row.appendChild(el("div",{style:"font-size:14px;font-weight:600;",text:pct+"%"})); return row; })(),
+    el("div", { class:"progress-bar", style:"height:6px;" }, [el("div",{class:"progress-fill",style:"width:"+pct+"%"})]),
+    el("div", { style:"margin-top:6px;font-size:11px;", text: doneToday+" of "+scheduledToday.length+" habits completed" })
   ]);
   content.appendChild(summary);
 
-  var toggleWrap = el("div", { style:"margin-top:14px;" });
-  var toggle = el("div", { class:"toggle-group" });
+  var toggleRow = el("div", { style:"margin-top:14px;display:flex;align-items:center;gap:10px;" });
+  var toggle = el("div", { class:"toggle-group", style:"flex:1;" });
   [["list","List"],["streak","Streak"],["grid","Grid"]].forEach(function(mode){
     var b = el("button", { class:"toggle-opt"+(DATA.settings.homeView===mode[0]?" active":""), text: mode[1] });
     b.addEventListener("click", function(){ DATA.settings.homeView=mode[0]; save(); render(); });
     toggle.appendChild(b);
   });
-  toggleWrap.appendChild(toggle);
-  content.appendChild(toggleWrap);
+  toggleRow.appendChild(toggle);
+  var waterBtn = el("button", { class:"focus-icon-btn", title:"WaterFlow", text:"\uD83E\uDDCA" });
+  waterBtn.addEventListener("click", function(){ window.location.href = "waterflow.html"; });
+  toggleRow.appendChild(waterBtn);
+  content.appendChild(toggleRow);
 
   if (habits.length===0) { content.appendChild(emptyState("\uD83C\uDF31","Start building your routine.","Create your first habit and begin tracking your progress.","+ Create Habit",function(){openHabitForm(null);})); return; }
 
@@ -2618,5 +2621,3 @@ window.__habitflow_debug = { getData: function(){ return DATA; } };
 </script>
 </body>
 </html>
-
-

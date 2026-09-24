@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>WaterFlow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f2faff; --card:#ffffff; --text:#0c2436; --sub:#5c7b8c;
+  --blue1:#3ab7ff; --blue2:#0a7ec4; --accent:#22c1dc; --border:#dceefa;
+  --danger:#e5566a; --good:#2fbf71; --warn:#f0a83e;
+  font-family:'Manrope',system-ui,sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#081b2e; --card:#0f2b45; --text:#eaf6ff; --sub:#8fb3c9;
+    --border:#1c3c58;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#081b2e; --card:#0f2b45; --text:#eaf6ff; --sub:#8fb3c9;
+  --border:#1c3c58;
+}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px); height:100%}
+body{margin:0; background:var(--bg); color:var(--text); height:100%; -webkit-tap-highlight-color:transparent}
+button{font-family:inherit; cursor:pointer; border:none}
+.app{max-width:1100px; margin:0 auto; padding:16px 16px 90px; min-height:100%}
+.topbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:18px}
+.topbar h1{font-size:1.1rem; margin:0}
+.topbar .sub{color:var(--sub); font-size:.85rem}
+.iconbtn{background:var(--card); border:1px solid var(--border); width:38px; height:38px; border-radius:12px; font-size:1.1rem; display:flex; align-items:center; justify-content:center}
+.grid{display:grid; grid-template-columns:1fr; gap:16px}
+@media(min-width:860px){.grid{grid-template-columns:1.1fr .9fr}}
+.card{background:var(--card); border:1px solid var(--border); border-radius:20px; padding:18px; box-shadow:0 6px 20px rgba(10,80,120,.06)}
+.meter-wrap{display:flex; flex-direction:column; align-items:center; padding:24px 18px}
+.meter{position:relative; width:220px; max-width:60vw; height:220px; aspect-ratio:1/1}
+.meter svg{width:100%; height:100%; transform:rotate(-90deg)}
+.meter-center{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center}
+.meter-center .amt{font-size:1.7rem; font-weight:800}
+.meter-center .goal{color:var(--sub); font-size:.85rem}
+.meter-center .pct{margin-top:4px; font-weight:700; color:var(--blue2)}
+.pace{margin-top:10px; font-size:.85rem; padding:6px 12px; border-radius:999px; background:var(--bg); border:1px solid var(--border)}
+.quickgrid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:14px}
+.qbtn{background:linear-gradient(135deg,var(--blue1),var(--blue2)); color:#fff; border-radius:14px; padding:12px 6px; font-weight:700; font-size:.9rem; transition:transform .1s}
+.qbtn:active{transform:scale(.94)}
+.qbtn.custom{background:var(--card); color:var(--text); border:1px dashed var(--border)}
+.bevrow{display:flex; gap:8px; overflow-x:auto; padding:12px 2px 4px; margin-top:6px}
+.bev{flex:0 0 auto; background:var(--bg); border:1px solid var(--border); border-radius:14px; padding:10px 14px; text-align:center; font-size:.8rem; min-width:64px}
+.bev.sel{background:var(--blue1); color:#fff; border-color:var(--blue1)}
+h3{margin:0 0 10px; font-size:1rem}
+.hist-item{display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--border)}
+.hist-item:last-child{border-bottom:none}
+.hist-ic{font-size:1.3rem}
+.hist-mid{flex:1}
+.hist-mid .n{font-weight:700; font-size:.9rem}
+.hist-mid .t{color:var(--sub); font-size:.78rem}
+.hist-amt{font-weight:700; font-size:.9rem}
+.hist-del{background:none; color:var(--danger); font-size:1rem; padding:4px}
+.stats-row{display:flex; gap:10px; margin-bottom:14px}
+.stat-pill{flex:1; background:var(--bg); border-radius:14px; padding:10px; text-align:center}
+.stat-pill b{display:block; font-size:1.2rem}
+.stat-pill span{color:var(--sub); font-size:.72rem}
+.barchart{display:flex; align-items:flex-end; gap:8px; height:110px; margin-top:6px}
+.bar-col{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%}
+.bar{width:100%; border-radius:6px 6px 0 0; background:linear-gradient(180deg,var(--blue1),var(--blue2)); transition:height .4s}
+.bar-col span{font-size:.65rem; color:var(--sub); margin-top:4px}
+.toast{position:fixed; bottom:90px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--text); color:var(--bg); padding:10px 18px; border-radius:999px; font-weight:600; font-size:.85rem; opacity:0; transition:all .3s; pointer-events:none; z-index:50}
+.toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+.nav{position:fixed; bottom:0; left:0; right:0; background:var(--card); border-top:1px solid var(--border); display:flex; padding-bottom:env(safe-area-inset-bottom,0px); z-index:40}
+.navbtn{flex:1; background:none; padding:10px 4px 8px; display:flex; flex-direction:column; align-items:center; gap:2px; color:var(--sub); font-size:.68rem; font-weight:700}
+.navbtn.active{color:var(--blue2)}
+.navbtn .ic{font-size:1.2rem}
+.sidebar{display:none}
+.sidebar .brand{font-weight:800; font-size:1.3rem; text-align:center; padding:6px 0 18px; color:var(--blue2)}
+@media(min-width:860px){
+  .nav{display:none}
+  .sidebar{display:flex; flex-direction:column; position:fixed; left:0; top:0; bottom:0; width:92px; background:var(--card); border-right:1px solid var(--border); padding-top:14px; z-index:40}
+  .sidebar .navbtn{flex:none; padding:14px 4px}
+  .app{padding-left:112px; padding-bottom:24px; max-width:1200px}
+}
+.page{display:none}
+.page.active{display:block}
+.empty{text-align:center; color:var(--sub); padding:30px 10px; font-size:.9rem}
+.settings-row{display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-bottom:1px solid var(--border)}
+.settings-row:last-child{border-bottom:none}
+.toggle{width:44px; height:26px; border-radius:99px; background:var(--border); position:relative; transition:.2s}
+.toggle.on{background:var(--blue1)}
+.toggle::after{content:'';position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%; background:#fff; transition:.2s}
+.toggle.on::after{left:21px}
+input[type=text],input[type=number]{background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:8px 10px; color:var(--text); width:100%; font-family:inherit}
+.streakbadge{display:flex; align-items:center; gap:8px; background:linear-gradient(135deg,#ffb64d,#ff7043); color:#fff; border-radius:16px; padding:14px; margin-top:10px}
+.streakbadge b{font-size:1.4rem}
+.overlay{position:fixed; inset:0; background:rgba(0,0,10,.4); display:none; align-items:center; justify-content:center; z-index:60; padding:20px}
+.overlay.show{display:flex}
+.sheet{background:var(--card); border-radius:18px; padding:20px; max-width:360px; width:100%}
+.sheet h3{margin-bottom:12px}
+.sheet .actions{display:flex; gap:10px; margin-top:16px}
+.sheet button.primary{flex:1; background:var(--blue1); color:#fff; padding:10px; border-radius:10px; font-weight:700}
+.sheet button.ghost{flex:1; background:var(--bg); color:var(--text); padding:10px; border-radius:10px}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="topbar">
+    <div><h1 id="greet">Good day 👋</h1><div class="sub">Let's stay hydrated today.</div></div>
+    <div style="display:flex;gap:8px;">
+      <button class="iconbtn" title="Back to HabitFlow" onclick="location.href='index.html'">⬅️</button>
+      <button class="iconbtn" onclick="toggleTheme()">🌙</button>
+    </div>
+  </div>
+
+  <div id="page-home" class="page active">
+    <div class="grid">
+      <div class="card meter-wrap">
+        <div class="meter">
+          <svg viewBox="0 0 200 200">
+            <circle cx="100" cy="100" r="88" stroke="var(--border)" stroke-width="16" fill="none"/>
+            <circle id="ring" cx="100" cy="100" r="88" stroke="url(#g)" stroke-width="16" fill="none" stroke-linecap="round" stroke-dasharray="553" stroke-dashoffset="553" style="transition:stroke-dashoffset .6s ease"/>
+            <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3ab7ff"/><stop offset="100%" stop-color="#0a7ec4"/></linearGradient></defs>
+          </svg>
+          <div class="meter-center">
+            <div class="amt" id="amtNow">0 ml</div>
+            <div class="goal" id="amtGoal">of 2500 ml</div>
+            <div class="pct" id="amtPct">0%</div>
+          </div>
+        </div>
+        <div class="pace" id="paceMsg">🟢 On track</div>
+        <div class="quickgrid" id="quickgrid"></div>
+      </div>
+
+      <div class="card">
+        <h3>Beverage</h3>
+        <div class="bevrow" id="bevrow"></div>
+        <h3 style="margin-top:16px">Today</h3>
+        <div id="todayList"></div>
+        <div class="streakbadge">
+          <span style="font-size:1.6rem">🔥</span>
+          <div><b id="streakN">0</b> day streak · longest <span id="streakLong">0</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="page-history" class="page">
+    <div class="card"><h3>History</h3><div id="historyList"></div></div>
+  </div>
+
+  <div id="page-stats" class="page">
+    <div class="card">
+      <h3>This Week</h3>
+      <div class="stats-row">
+        <div class="stat-pill"><b id="statAvg">0</b><span>AVG ml/day</span></div>
+        <div class="stat-pill"><b id="statBest">0%</b><span>BEST DAY</span></div>
+        <div class="stat-pill"><b id="statScore">0</b><span>HYDRATION SCORE</span></div>
+      </div>
+      <div class="barchart" id="barchart"></div>
+    </div>
+  </div>
+
+  <div id="page-reminders" class="page">
+    <div class="card">
+      <h3>Reminders</h3>
+      <div class="settings-row"><span>Enable reminders</span><div class="toggle" id="toggleRem" onclick="toggleSetting('remindersOn',this)"></div></div>
+      <div class="settings-row"><span>Interval (minutes)</span><input type="number" id="intervalInput" style="width:80px" value="60" onchange="setInterval_(this.value)"></div>
+      <div class="settings-row"><span>Quiet hours start</span><input type="text" id="quietStart" style="width:90px" value="22:00" onchange="saveState()"></div>
+      <div class="settings-row"><span>Quiet hours end</span><input type="text" id="quietEnd" style="width:90px" value="07:00" onchange="saveState()"></div>
+      <button class="qbtn" style="width:100%;margin-top:14px" onclick="requestNotif()">Enable Browser Notifications</button>
+      <p class="sub" id="nextRemText" style="margin-top:10px">Next reminder: —</p>
+    </div>
+  </div>
+
+  <div id="page-profile" class="page">
+    <div class="card">
+      <h3>Profile</h3>
+      <div class="settings-row"><span>Name</span><input type="text" id="pName" style="width:140px" onchange="saveProfile()"></div>
+      <div class="settings-row"><span>Daily goal (ml)</span><input type="number" id="pGoal" style="width:100px" onchange="saveProfile()"></div>
+      <div class="settings-row"><span>Weight (kg)</span><input type="number" id="pWeight" style="width:100px" onchange="saveProfile()"></div>
+      <h3 style="margin-top:18px">Data</h3>
+      <div class="settings-row"><span>Export JSON</span><button class="qbtn" onclick="exportData()">Export</button></div>
+      <div class="settings-row"><span>Clear all data</span><button class="qbtn" style="background:var(--danger)" onclick="clearAll()">Clear</button></div>
+      <p class="sub" style="margin-top:10px">All data stays in this browser only — nothing is sent anywhere.</p>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="overlay" id="customOverlay">
+  <div class="sheet">
+    <h3>Custom Amount</h3>
+    <input type="number" id="customAmt" placeholder="Amount in ml">
+    <div class="actions"><button class="ghost" onclick="closeOverlay()">Cancel</button><button class="primary" onclick="addCustom()">Add</button></div>
+  </div>
+</div>
+
+<nav class="nav">
+  <button class="navbtn active" data-p="home" onclick="showPage('home')"><span class="ic">🏠</span>Home</button>
+  <button class="navbtn" data-p="history" onclick="showPage('history')"><span class="ic">📜</span>History</button>
+  <button class="navbtn" data-p="stats" onclick="showPage('stats')"><span class="ic">📊</span>Stats</button>
+  <button class="navbtn" data-p="reminders" onclick="showPage('reminders')"><span class="ic">⏰</span>Remind</button>
+  <button class="navbtn" data-p="profile" onclick="showPage('profile')"><span class="ic">👤</span>Profile</button>
+</nav>
+
+<nav class="sidebar">
+  <div class="brand">💧</div>
+  <button class="navbtn active" data-p="home" onclick="showPage('home')"><span class="ic">🏠</span>Home</button>
+  <button class="navbtn" data-p="history" onclick="showPage('history')"><span class="ic">📜</span>History</button>
+  <button class="navbtn" data-p="stats" onclick="showPage('stats')"><span class="ic">📊</span>Stats</button>
+  <button class="navbtn" data-p="reminders" onclick="showPage('reminders')"><span class="ic">⏰</span>Remind</button>
+  <button class="navbtn" data-p="profile" onclick="showPage('profile')"><span class="ic">👤</span>Profile</button>
+</nav>
+
+<script>
+const BEVS = [
+  {id:'water',name:'Water',icon:'💧',factor:1},
+  {id:'coffee',name:'Coffee',icon:'☕',factor:.8},
+  {id:'tea',name:'Tea',icon:'🍵',factor:.9},
+  {id:'milk',name:'Milk',icon:'🥛',factor:.9},
+  {id:'juice',name:'Juice',icon:'🧃',factor:.85},
+  {id:'soft',name:'Soft Drink',icon:'🥤',factor:.7},
+  {id:'coconut',name:'Coconut',icon:'🥥',factor:1},
+  {id:'sports',name:'Sports',icon:'🏋️',factor:.95}
+];
+const QUICK = [150,250,350,500,750,1000];
+let state = JSON.parse(localStorage.getItem('waterflow_state')||'null') || {
+  name:'there', goal:2500, weight:65, theme:'light',
+  drinks:[], remindersOn:true, interval:60, quietStart:'22:00', quietEnd:'07:00',
+  selectedBev:'water'
+};
+function saveState(){
+  state.quietStart = document.getElementById('quietStart').value;
+  state.quietEnd = document.getElementById('quietEnd').value;
+  localStorage.setItem('waterflow_state', JSON.stringify(state));
+}
+function persist(){ localStorage.setItem('waterflow_state', JSON.stringify(state)); }
+
+function todayKey(d=new Date()){ return d.toISOString().slice(0,10); }
+function todayDrinks(){ const k=todayKey(); return state.drinks.filter(d=>d.ts.slice(0,10)===k); }
+function bev(id){ return BEVS.find(b=>b.id===id)||BEVS[0]; }
+
+function render(){
+  document.getElementById('greet').textContent = `Hi ${state.name||'there'} 👋`;
+  const today = todayDrinks();
+  const total = today.reduce((s,d)=>s+d.amount,0);
+  const hyd = today.reduce((s,d)=>s+Math.round(d.amount*bev(d.bev).factor),0);
+  const pct = Math.min(100, Math.round((hyd/state.goal)*100));
+  document.getElementById('amtNow').textContent = hyd+' ml';
+  document.getElementById('amtGoal').textContent = 'of '+state.goal+' ml';
+  document.getElementById('amtPct').textContent = pct+'%';
+  const circumference = 553;
+  document.getElementById('ring').style.strokeDashoffset = circumference - (circumference*pct/100);
+
+  // pace
+  const hr = new Date().getHours();
+  const expectedPct = Math.min(100, Math.round(((hr-7)/15)*100));
+  const paceEl = document.getElementById('paceMsg');
+  if(hr<7){ paceEl.textContent='😴 Rise and hydrate soon'; }
+  else if(pct >= expectedPct-5){ paceEl.textContent='🟢 On track'; }
+  else if(pct >= expectedPct-20){ paceEl.textContent='🟡 Slightly behind — try 250 ml'; }
+  else { paceEl.textContent='🔴 Behind schedule — drink up!'; }
+
+  // quick grid
+  const qg = document.getElementById('quickgrid');
+  qg.innerHTML = QUICK.map(a=>`<button class="qbtn" onclick="addDrink(${a})">+ ${a>=1000?(a/1000)+' L':a+' ml'}</button>`).join('')
+    + `<button class="qbtn custom" onclick="openOverlay()">Custom</button>`;
+
+  // beverage row
+  document.getElementById('bevrow').innerHTML = BEVS.map(b=>
+    `<button class="bev ${b.id===state.selectedBev?'sel':''}" onclick="selectBev('${b.id}')">${b.icon}<br>${b.name}</button>`).join('');
+
+  // today list
+  const tl = document.getElementById('todayList');
+  tl.innerHTML = today.length ? today.slice().reverse().map(d=>histRow(d)).join('') : `<div class="empty">No drinks yet. Tap a quick-add above 💧</div>`;
+
+  // full history
+  const hl = document.getElementById('historyList');
+  hl.innerHTML = state.drinks.length ? state.drinks.slice().reverse().map(d=>histRow(d,true)).join('') : `<div class="empty">Your history will appear here.</div>`;
+
+  renderStats();
+  renderStreak();
+}
+function histRow(d, showDate){
+  const b = bev(d.bev);
+  const t = new Date(d.ts);
+  const time = showDate ? t.toLocaleDateString([], {month:'short',day:'numeric'})+' '+t.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : t.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  return `<div class="hist-item">
+    <div class="hist-ic">${b.icon}</div>
+    <div class="hist-mid"><div class="n">${b.name}</div><div class="t">${time}</div></div>
+    <div class="hist-amt">${d.amount} ml</div>
+    <button class="hist-del" onclick="delDrink('${d.id}')">✕</button>
+  </div>`;
+}
+function selectBev(id){ state.selectedBev=id; persist(); render(); }
+function addDrink(amount){
+  state.drinks.push({id:Date.now()+''+Math.random(), bev:state.selectedBev, amount, ts:new Date().toISOString()});
+  persist(); render(); showToast(`${bev(state.selectedBev).icon} ${amount} ml added!`);
+}
+function delDrink(id){ state.drinks = state.drinks.filter(d=>d.id!==id); persist(); render(); }
+function openOverlay(){ document.getElementById('customOverlay').classList.add('show'); }
+function closeOverlay(){ document.getElementById('customOverlay').classList.remove('show'); }
+function addCustom(){
+  const v = parseInt(document.getElementById('customAmt').value);
+  if(v>0){ addDrink(v); }
+  closeOverlay();
+}
+function showToast(msg){
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(window._tt); window._tt=setTimeout(()=>t.classList.remove('show'),1800);
+}
+function showPage(p){
+  document.querySelectorAll('.page').forEach(el=>el.classList.remove('active'));
+  document.getElementById('page-'+p).classList.add('active');
+  document.querySelectorAll('.navbtn').forEach(b=>b.classList.toggle('active', b.dataset.p===p));
+}
+function toggleTheme(){
+  state.theme = state.theme==='dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', state.theme);
+  persist();
+}
+function toggleSetting(key, el){
+  state[key] = !state[key]; el.classList.toggle('on', state[key]); persist();
+}
+function setInterval_(v){ state.interval = parseInt(v)||60; persist(); }
+function requestNotif(){
+  if(!('Notification' in window)){ showToast('Notifications not supported here'); return; }
+  Notification.requestPermission().then(p=>{
+    showToast(p==='granted' ? 'Notifications enabled 🔔' : 'Permission not granted');
+  });
+}
+function saveProfile(){
+  state.name = document.getElementById('pName').value;
+  state.goal = parseInt(document.getElementById('pGoal').value)||2500;
+  state.weight = parseInt(document.getElementById('pWeight').value)||65;
+  persist(); render();
+}
+function exportData(){
+  const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='waterflow-data.json'; a.click();
+}
+function clearAll(){
+  if(confirm('Clear all hydration data? This cannot be undone.')){
+    state.drinks=[]; persist(); render();
+  }
+}
+function renderStats(){
+  const days=[]; const now=new Date();
+  for(let i=6;i>=0;i--){
+    const d=new Date(now); d.setDate(now.getDate()-i);
+    const k=todayKey(d);
+    const total=state.drinks.filter(x=>x.ts.slice(0,10)===k).reduce((s,x)=>s+Math.round(x.amount*bev(x.bev).factor),0);
+    days.push({label:d.toLocaleDateString([],{weekday:'short'}), total, pct:Math.min(100,Math.round(total/state.goal*100))});
+  }
+  const avg = Math.round(days.reduce((s,d)=>s+d.total,0)/7);
+  const best = Math.max(...days.map(d=>d.pct));
+  document.getElementById('statAvg').textContent = avg;
+  document.getElementById('statBest').textContent = best+'%';
+  const consistency = days.filter(d=>d.pct>=80).length/7*100;
+  const score = Math.round(days[6].pct*0.5 + consistency*0.5);
+  document.getElementById('statScore').textContent = score;
+  document.getElementById('barchart').innerHTML = days.map(d=>
+    `<div class="bar-col"><div class="bar" style="height:${Math.max(4,d.pct)}%"></div><span>${d.label}</span></div>`).join('');
+}
+function renderStreak(){
+  let streak=0; let d=new Date();
+  while(true){
+    const k=todayKey(d);
+    const total=state.drinks.filter(x=>x.ts.slice(0,10)===k).reduce((s,x)=>s+Math.round(x.amount*bev(x.bev).factor),0);
+    if(total>=state.goal){ streak++; d.setDate(d.getDate()-1); } else break;
+  }
+  document.getElementById('streakN').textContent=streak;
+  document.getElementById('streakLong').textContent=Math.max(streak, state.longest||0);
+  state.longest = Math.max(streak, state.longest||0);
+}
+// init
+document.documentElement.setAttribute('data-theme', state.theme||'light');
+document.getElementById('pName').value = state.name||'';
+document.getElementById('pGoal').value = state.goal;
+document.getElementById('pWeight').value = state.weight;
+document.getElementById('quietStart').value = state.quietStart;
+document.getElementById('quietEnd').value = state.quietEnd;
+document.getElementById('toggleRem').classList.toggle('on', state.remindersOn);
+document.getElementById('intervalInput').value = state.interval;
+render();
+</script>
+</body>
+</html>

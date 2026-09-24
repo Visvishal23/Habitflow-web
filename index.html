@@ -233,6 +233,12 @@ label.field-label { font-size: 13px; font-weight: 600; color: var(--text-seconda
 .fsclock-lap-row { display: flex; justify-content: space-between; padding: 7px 10px; border-bottom: 1px solid rgba(255,255,255,0.18); font-size: 14px; font-variant-numeric: tabular-nums; }
 .font-opt { padding: 10px 14px; border-radius: 12px; border: 1.5px solid var(--outline); background: var(--surface); color: var(--text); font-size: 15px; cursor: pointer; text-align: left; margin-bottom: 8px; display: block; width: 100%; }
 .font-opt.active { border-color: var(--primary); background: var(--primary-container); color: var(--on-primary-container); }
+.hydro-ring { position: relative; width: 180px; height: 180px; margin: 0 auto; }
+.hydro-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.hydro-ring-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.hydro-ring-center .amt { font-size: 22px; font-weight: 700; }
+.hydro-ring-center .goal { font-size: 12px; color: var(--text-secondary); }
+.hydro-ring-center .pct { font-size: 13px; font-weight: 700; color: var(--primary); margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -306,6 +312,10 @@ function applyDeviceMode() {
 // ---------- Data model ----------
 var defaultData = {
   habits: [], completions: [], journal: [], focusLog: {},
+  water: {
+    drinks: [], goal: 2500, weight: 65, selectedBev: "water",
+    remindersOn: true, interval: 60, quietStart: "22:00", quietEnd: "07:00", longest: 0
+  },
   settings: {
     theme: "system", homeView: "list", onboardingDone: false, nickname: "", bgColor: "", focusSound: true,
     fsClockBg: { type: "default", value: "", opacity: 1 },
@@ -438,6 +448,8 @@ function subscribeToUser(uid) {
       if (typeof DATA.settings.fsClockBg.opacity !== "number") DATA.settings.fsClockBg.opacity = 1;
       if (!DATA.settings.fsClockStyle) DATA.settings.fsClockStyle = { fontFamily:"poppins", color:"#ffffff", bold:false };
       if (!DATA.settings.appWallpaper) DATA.settings.appWallpaper = { value:"", opacity:0.3 };
+      if (!DATA.water) DATA.water = JSON.parse(JSON.stringify(defaultData.water));
+      else { for (var wk in defaultData.water) { if (!(wk in DATA.water)) DATA.water[wk] = defaultData.water[wk]; } }
     } else {
       DATA = JSON.parse(JSON.stringify(defaultData));
       setDoc(userDocRef, DATA).catch(function(err) {
@@ -1886,6 +1898,7 @@ function render() {
   else if (currentTab==="focus") renderFocusScreen(content);
   else if (currentTab==="stats") renderStats(content);
   else if (currentTab==="journal") renderJournalTab(content);
+  else if (currentTab==="water") renderWater(content);
   else if (currentTab==="settings") renderSettings(content);
   root.appendChild(content);
 
@@ -1924,7 +1937,7 @@ function renderLoginScreen() {
 }
 
 function renderBottomNav() {
-  var items = [["home","\uD83C\uDFE0","Home"],["calendar","\uD83D\uDCC5","Calendar"],["focus","\uD83C\uDF45","Focus"],["stats","\uD83D\uDCCA","Stats"],["settings","\u2699\uFE0F","Settings"]];
+  var items = [["home","\uD83C\uDFE0","Home"],["calendar","\uD83D\uDCC5","Calendar"],["focus","\uD83C\uDF45","Focus"],["water","\uD83D\uDCA7","Water"],["stats","\uD83D\uDCCA","Stats"],["settings","\u2699\uFE0F","Settings"]];
   var nav = el("div", { class:"bottomnav" });
   if (deviceMode === "desktop") {
     nav.appendChild(el("div", { class:"sidenav-brand" }, [ el("span",{text:"\uD83D\uDD25"}), el("span",{text:"HabitFlow"}) ]));
@@ -1944,6 +1957,258 @@ function renderBottomNav() {
     nav.appendChild(signOutBtn);
   }
   return nav;
+}
+
+// ---- Water ----
+var BEVS = [
+  { id:"water", name:"Water", icon:"\uD83D\uDCA7", factor:1 },
+  { id:"coffee", name:"Coffee", icon:"\u2615", factor:.8 },
+  { id:"tea", name:"Tea", icon:"\uD83C\uDF75", factor:.9 },
+  { id:"milk", name:"Milk", icon:"\uD83E\uDD5B", factor:.9 },
+  { id:"juice", name:"Juice", icon:"\uD83E\uDDC3", factor:.85 },
+  { id:"soft", name:"Soft Drink", icon:"\uD83E\uDD64", factor:.7 },
+  { id:"coconut", name:"Coconut", icon:"\uD83E\uDD65", factor:1 },
+  { id:"sports", name:"Sports", icon:"\uD83C\uDFCB\uFE0F", factor:.95 }
+];
+var WATER_QUICK = [150,250,350,500,750,1000];
+
+function bevInfo(id) { return BEVS.find(function(b){ return b.id===id; }) || BEVS[0]; }
+function waterDayKey(d) { d = d || new Date(); return d.toISOString().slice(0,10); }
+function hydratedAmount(list) { return list.reduce(function(s,d){ return s+Math.round(d.amount*bevInfo(d.bev).factor); }, 0); }
+function todayDrinksWater() { var k=waterDayKey(); return DATA.water.drinks.filter(function(x){ return x.ts.slice(0,10)===k; }); }
+function addDrink(amount) {
+  DATA.water.drinks.push({ id: Date.now()+""+Math.random(), bev: DATA.water.selectedBev, amount: amount, ts: new Date().toISOString() });
+  save(); render(); showSnackbar(bevInfo(DATA.water.selectedBev).icon+" "+amount+" ml added!");
+}
+function delDrink(id) { DATA.water.drinks = DATA.water.drinks.filter(function(d){ return d.id!==id; }); save(); render(); }
+function waterStreak() {
+  var streak=0, d=new Date();
+  while (true) {
+    var k = waterDayKey(d);
+    var total = hydratedAmount(DATA.water.drinks.filter(function(x){ return x.ts.slice(0,10)===k; }));
+    if (total >= DATA.water.goal) { streak++; d.setDate(d.getDate()-1); } else break;
+  }
+  DATA.water.longest = Math.max(streak, DATA.water.longest||0);
+  return streak;
+}
+function requestWaterNotif() {
+  if (!("Notification" in window)) { showSnackbar("Notifications not supported here"); return; }
+  Notification.requestPermission().then(function(p){ showSnackbar(p==="granted" ? "Notifications enabled \uD83D\uDD14" : "Permission not granted"); });
+}
+function waterHistRow(d, showDate) {
+  var b = bevInfo(d.bev);
+  var t = new Date(d.ts);
+  var time = showDate
+    ? t.toLocaleDateString([], {month:"short",day:"numeric"})+" "+t.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})
+    : t.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+  var row = el("div", { class:"habit-row" }, [
+    el("div", { class:"habit-icon", style:"background:var(--surface-variant);", text: b.icon }),
+    el("div", { style:"flex:1;" }, [
+      el("div", { style:"font-weight:600;font-size:14px;", text: b.name }),
+      el("div", { class:"h-body", style:"font-size:12px;", text: time })
+    ]),
+    el("div", { style:"font-weight:700;font-size:14px;margin-right:6px;", text: d.amount+" ml" })
+  ]);
+  var delBtn = el("button", { class:"icon-btn", style:"font-size:14px;", text:"\uD83D\uDDD1\uFE0F" });
+  delBtn.addEventListener("click", function(){ delDrink(d.id); });
+  row.appendChild(delBtn);
+  return row;
+}
+function openCustomAmountModal() {
+  var wrap = el("div", {});
+  wrap.appendChild(el("div", { class:"h-title", text:"Custom amount" }));
+  var amtInput = el("input", { type:"number", placeholder:"Amount in ml", style:"margin-top:12px;" });
+  wrap.appendChild(amtInput);
+  var row = el("div", { class:"row" });
+  var cancelBtn = el("button", { class:"btn btn-outline", style:"flex:1;", text:"Cancel" });
+  cancelBtn.addEventListener("click", closeModal);
+  var addBtn = el("button", { class:"btn btn-primary", style:"flex:1;", text:"Add" });
+  addBtn.addEventListener("click", function(){ var v=parseInt(amtInput.value); if (v>0) addDrink(v); closeModal(); });
+  row.appendChild(cancelBtn); row.appendChild(addBtn);
+  wrap.appendChild(row);
+  openModal(wrap, true);
+}
+function openWaterGoalModal() {
+  var wrap = el("div", {});
+  wrap.appendChild(el("div", { class:"h-title", text:"Hydration goal" }));
+  wrap.appendChild(el("label", { class:"field-label", style:"margin-top:12px;", text:"Daily goal (ml)" }));
+  var goalInput = el("input", { type:"number", value: String(DATA.water.goal) });
+  wrap.appendChild(goalInput);
+  wrap.appendChild(el("label", { class:"field-label", text:"Weight (kg)" }));
+  var weightInput = el("input", { type:"number", value: String(DATA.water.weight) });
+  wrap.appendChild(weightInput);
+  var saveBtn = el("button", { class:"btn btn-primary btn-full", text:"Save" });
+  saveBtn.addEventListener("click", function() {
+    DATA.water.goal = parseInt(goalInput.value)||2500;
+    DATA.water.weight = parseInt(weightInput.value)||65;
+    save(); closeModal(); render();
+  });
+  wrap.appendChild(saveBtn);
+  openModal(wrap, true);
+}
+function openWaterReminderModal() {
+  var wrap = el("div", {});
+  wrap.appendChild(el("div", { class:"h-title", text:"Reminder settings" }));
+  wrap.appendChild(el("label", { class:"field-label", style:"margin-top:12px;", text:"Interval (minutes)" }));
+  var intervalInput = el("input", { type:"number", value: String(DATA.water.interval) });
+  wrap.appendChild(intervalInput);
+  wrap.appendChild(el("label", { class:"field-label", text:"Quiet hours start" }));
+  var qsInput = el("input", { type:"text", value: DATA.water.quietStart });
+  wrap.appendChild(qsInput);
+  wrap.appendChild(el("label", { class:"field-label", text:"Quiet hours end" }));
+  var qeInput = el("input", { type:"text", value: DATA.water.quietEnd });
+  wrap.appendChild(qeInput);
+  var notifBtn = el("button", { class:"btn btn-outline btn-full", style:"margin-top:2px;", text:"Enable Browser Notifications" });
+  notifBtn.addEventListener("click", requestWaterNotif);
+  wrap.appendChild(notifBtn);
+  var saveBtn = el("button", { class:"btn btn-primary btn-full", style:"margin-top:10px;", text:"Save" });
+  saveBtn.addEventListener("click", function() {
+    DATA.water.interval = parseInt(intervalInput.value)||60;
+    DATA.water.quietStart = qsInput.value||"22:00";
+    DATA.water.quietEnd = qeInput.value||"07:00";
+    save(); closeModal(); render();
+  });
+  wrap.appendChild(saveBtn);
+  openModal(wrap, true);
+}
+function renderWater(content) {
+  var w = DATA.water;
+  var today = todayDrinksWater();
+  var hyd = hydratedAmount(today);
+  var pct = Math.min(100, Math.round(hyd / w.goal * 100));
+
+  content.appendChild(el("div", { class:"topbar", style:"padding-left:0;padding-right:0;" }, [
+    el("div", { class:"h-headline", text:"\uD83D\uDCA7 Hydration" }),
+    el("div", { class:"h-body", text:"Let's stay hydrated today." })
+  ]));
+
+  var ringCard = el("div", { class:"card", style:"display:flex;flex-direction:column;align-items:center;padding:22px 16px 18px 16px;" });
+  var ring = el("div", { class:"hydro-ring" });
+  ring.innerHTML = '<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="88" stroke="var(--surface-variant)" stroke-width="16" fill="none"/><circle cx="100" cy="100" r="88" stroke="var(--primary)" stroke-width="16" fill="none" stroke-linecap="round" stroke-dasharray="553" stroke-dashoffset="'+(553-553*pct/100)+'" style="transition:stroke-dashoffset .5s ease"/></svg>';
+  ring.appendChild(el("div", { class:"hydro-ring-center" }, [
+    el("div", { class:"amt", text: hyd+" ml" }),
+    el("div", { class:"goal", text:"of "+w.goal+" ml" }),
+    el("div", { class:"pct", text: pct+"%" })
+  ]));
+  ringCard.appendChild(ring);
+
+  var hr = new Date().getHours();
+  var expectedPct = Math.min(100, Math.round(((hr-7)/15)*100));
+  var paceTxt;
+  if (hr<7) paceTxt = "\uD83D\uDE34 Rise and hydrate soon";
+  else if (pct >= expectedPct-5) paceTxt = "\uD83D\uDFE2 On track";
+  else if (pct >= expectedPct-20) paceTxt = "\uD83D\uDFE1 Slightly behind \u2014 try 250 ml";
+  else paceTxt = "\uD83D\uDD34 Behind schedule \u2014 drink up!";
+  ringCard.appendChild(el("div", { class:"h-body", style:"margin-top:6px;font-size:13px;", text: paceTxt }));
+
+  ringCard.appendChild(el("div", { class:"field-label", style:"align-self:flex-start;margin-top:16px;", text:"Quick add" }));
+  var quickWrap = el("div", { class:"chips" });
+  WATER_QUICK.forEach(function(a) {
+    var label = a>=1000 ? (a/1000)+" L" : a+" ml";
+    var b = el("button", { class:"chip", text:"+ "+label });
+    b.addEventListener("click", function(){ addDrink(a); });
+    quickWrap.appendChild(b);
+  });
+  var customChip = el("button", { class:"chip", text:"Custom\u2026" });
+  customChip.addEventListener("click", openCustomAmountModal);
+  quickWrap.appendChild(customChip);
+  ringCard.appendChild(quickWrap);
+  content.appendChild(ringCard);
+
+  content.appendChild(el("div", { class:"section-title", text:"Beverage" }));
+  var bevCard = el("div", { class:"card" });
+  var bevChips = el("div", { class:"chips" });
+  BEVS.forEach(function(b) {
+    var chip = el("button", { class:"chip"+(b.id===w.selectedBev?" active":""), text: b.icon+" "+b.name });
+    chip.addEventListener("click", function(){ w.selectedBev=b.id; save(); render(); });
+    bevChips.appendChild(chip);
+  });
+  bevCard.appendChild(bevChips);
+  content.appendChild(bevCard);
+
+  var streak = waterStreak();
+  content.appendChild(el("div", { class:"summary-card", style:"margin-top:14px;padding:14px;display:flex;align-items:center;gap:12px;" }, [
+    el("div", { style:"font-size:26px;", text:"\uD83D\uDD25" }),
+    el("div", {}, [
+      el("div", { style:"font-weight:700;font-size:15px;", text: streak+" day streak" }),
+      el("div", { style:"font-size:12px;", text:"Longest: "+Math.max(streak, w.longest||0)+" days" })
+    ])
+  ]));
+
+  content.appendChild(el("div", { class:"section-title", text:"Today" }));
+  if (today.length===0) {
+    content.appendChild(el("div", { class:"h-body", style:"text-align:center;padding:20px 0;", text:"No drinks yet \u2014 tap a quick add above \uD83D\uDCA7" }));
+  } else {
+    var todayCard = el("div", { class:"card" });
+    today.slice().reverse().forEach(function(d){ todayCard.appendChild(waterHistRow(d,false)); });
+    content.appendChild(todayCard);
+  }
+
+  content.appendChild(el("div", { class:"section-title", text:"This Week" }));
+  var days = []; var now = new Date();
+  for (var i=6;i>=0;i--) { var dd=new Date(now); dd.setDate(now.getDate()-i); days.push(dd); }
+  var dayTotals = days.map(function(dd){ var k=waterDayKey(dd); return hydratedAmount(w.drinks.filter(function(x){ return x.ts.slice(0,10)===k; })); });
+  var avg = Math.round(dayTotals.reduce(function(a,b){ return a+b; }, 0)/7);
+  var bestPct = Math.max.apply(null, dayTotals.map(function(t){ return Math.min(100, Math.round(t/w.goal*100)); }));
+  content.appendChild(el("div", { class:"row", style:"margin-bottom:10px;" }, [
+    el("div", { class:"stat-box" }, [ el("div",{class:"val",text:String(avg)}), el("div",{class:"lbl",text:"AVG ML/DAY"}) ]),
+    el("div", { class:"stat-box" }, [ el("div",{class:"val",text:bestPct+"%"}), el("div",{class:"lbl",text:"BEST DAY"}) ])
+  ]));
+  var chartCard = el("div", { class:"card" });
+  var chart = el("div", { class:"bar-chart" });
+  var maxT = Math.max.apply(null, dayTotals.concat([w.goal]));
+  dayTotals.forEach(function(t, idx) {
+    var h = Math.max(4, Math.round(t/maxT*90));
+    chart.appendChild(el("div", { class:"bar-col" }, [
+      el("div", { class:"bar-value", text: t>=1000 ? (Math.round(t/100)/10)+"L" : String(t) }),
+      el("div", { class:"bar-fill", style:"height:"+h+"px;" }),
+      el("div", { class:"bar-label", text: days[idx].toLocaleDateString(undefined,{weekday:"narrow"}) })
+    ]));
+  });
+  chartCard.appendChild(chart);
+  content.appendChild(chartCard);
+
+  content.appendChild(el("div", { class:"section-title", text:"Settings" }));
+  var settingsCard = el("div", { class:"card" });
+  var goalRow = el("div", { class:"settings-row" }, [
+    el("div", {}, [ el("div",{text:"Daily goal"}), el("div",{class:"h-body",style:"font-size:12px;",text: w.goal+" ml \u00B7 "+w.weight+" kg"}) ])
+  ]);
+  var goalChangeBtn = el("button", { class:"btn-text", text:"Change" });
+  goalChangeBtn.addEventListener("click", openWaterGoalModal);
+  goalRow.appendChild(goalChangeBtn);
+  settingsCard.appendChild(goalRow);
+
+  var remRow = el("div", { class:"radio-row" }, [
+    el("div", { class:"radio-dot"+(w.remindersOn?" active":"") }),
+    el("div", { style:"flex:1;", text:"Reminders every "+w.interval+" min" })
+  ]);
+  remRow.addEventListener("click", function(){ w.remindersOn=!w.remindersOn; save(); render(); });
+  settingsCard.appendChild(remRow);
+  var remChangeRow = el("div", { class:"settings-row", style:"padding-top:0;" }, [ el("div", {}) ]);
+  var remChangeBtn = el("button", { class:"btn-text", text:"Reminder settings" });
+  remChangeBtn.addEventListener("click", openWaterReminderModal);
+  remChangeRow.appendChild(remChangeBtn);
+  settingsCard.appendChild(remChangeRow);
+
+  var clearRow = el("div", { class:"settings-row" }, [ el("div",{text:"Clear hydration log"}) ]);
+  var clearBtn = el("button", { class:"btn-text", style:"color:var(--error);", text:"Clear" });
+  clearBtn.addEventListener("click", function() {
+    confirmDialog("Clear hydration log?", "This deletes every logged drink. This cannot be undone.", function() {
+      DATA.water.drinks = []; save(); closeModal(); render(); showSnackbar("Hydration log cleared");
+    });
+  });
+  clearRow.appendChild(clearBtn);
+  settingsCard.appendChild(clearRow);
+  content.appendChild(settingsCard);
+
+  content.appendChild(el("div", { class:"section-title", text:"History" }));
+  if (w.drinks.length===0) {
+    content.appendChild(el("div", { class:"h-body", text:"Your history will appear here." }));
+  } else {
+    var histCard = el("div", { class:"card" });
+    w.drinks.slice().reverse().forEach(function(d){ histCard.appendChild(waterHistRow(d,true)); });
+    content.appendChild(histCard);
+  }
 }
 
 // ---- Home ----
@@ -1977,7 +2242,7 @@ function renderHome(content) {
   ]);
   content.appendChild(summary);
 
-  var toggleRow = el("div", { style:"margin-top:14px;display:flex;align-items:center;gap:10px;" });
+  var toggleRow = el("div", { style:"margin-top:14px;display:flex;align-items:center;justify-content:flex-end;gap:6px;" });
   var toggle = el("div", { class:"toggle-group", style:"flex:1;" });
   [["list","List"],["streak","Streak"],["grid","Grid"]].forEach(function(mode){
     var b = el("button", { class:"toggle-opt"+(DATA.settings.homeView===mode[0]?" active":""), text: mode[1] });
@@ -1985,8 +2250,8 @@ function renderHome(content) {
     toggle.appendChild(b);
   });
   toggleRow.appendChild(toggle);
-  var waterBtn = el("button", { class:"focus-icon-btn", title:"WaterFlow", text:"\uD83E\uDDCA" });
-  waterBtn.addEventListener("click", function(){ window.location.href = "waterflow.html"; });
+  var waterBtn = el("button", { class:"focus-icon-btn", title:"Water", text:"\uD83D\uDCA7" });
+  waterBtn.addEventListener("click", function(){ goToTab("water"); });
   toggleRow.appendChild(waterBtn);
   content.appendChild(toggleRow);
 

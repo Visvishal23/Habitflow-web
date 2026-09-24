@@ -2242,10 +2242,10 @@ function renderHome(content) {
   ]);
   content.appendChild(summary);
 
-  var toggleRow = el("div", { style:"margin-top:14px;display:flex;align-items:center;justify-content:flex-end;gap:6px;" });
+  var toggleRow = el("div", { style:"margin-top:14px;display:flex;align-items:center;gap:6px;" });
   var toggle = el("div", { class:"toggle-group", style:"flex:1;" });
   [["list","List"],["streak","Streak"],["grid","Grid"]].forEach(function(mode){
-    var b = el("button", { class:"toggle-opt"+(DATA.settings.homeView===mode[0]?" active":""), text: mode[1] });
+    var b = el("button", { class:"toggle-opt"+(DATA.settings.homeView===mode[0]?" active":""), style:"flex:1;", text: mode[1] });
     b.addEventListener("click", function(){ DATA.settings.homeView=mode[0]; save(); render(); });
     toggle.appendChild(b);
   });
@@ -2253,6 +2253,8 @@ function renderHome(content) {
   var waterBtn = el("button", { class:"focus-icon-btn", title:"Water", text:"\uD83D\uDCA7" });
   waterBtn.addEventListener("click", function(){ goToTab("water"); });
   toggleRow.appendChild(waterBtn);
+  var gymIcon = el("div", { class:"focus-icon-btn", title:"Gym", style:"cursor:default;", text:"\uD83C\uDFCB\uFE0F" });
+  toggleRow.appendChild(gymIcon);
   content.appendChild(toggleRow);
 
   if (habits.length===0) { content.appendChild(emptyState("\uD83C\uDF31","Start building your routine.","Create your first habit and begin tracking your progress.","+ Create Habit",function(){openHabitForm(null);})); return; }
